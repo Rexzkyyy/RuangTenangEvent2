@@ -255,7 +255,7 @@ const AdminDashboard: React.FC = () => {
   const sendWhatsApp = useCallback(async (p: RTParticipant) => {
     const ticketUrl = `${window.location.origin}/t/${p.id}`;
     const ticketCode = formatTicketCode(p.barcode || p.id || '');
-    const message = `Halo Kak *${p.nama_lengkap}*! 👋\n\nTerima kasih banyak telah mendaftar di acara *Jeda Sejenak Menguatkan Hati*. Kami sangat antusias menyambut kehadiran Kakak! ✨\n\nBerikut adalah rincian E-Tiket Kakak:\n\n🎟️ *Nomor Tiket:* ${ticketCode}\n⭐ *Kategori Tiket:* ${p.jenis_tiket}\n📅 *Waktu:* Kamis, 3 Sept 2026 (08.00 - 12.00 WITA)\n📍 *Lokasi:* Hotel Zahra Syariah, Kendari\n\n🔗 *Link E-Tiket:* \n${ticketUrl}\n\nMohon siapkan dan tunjukkan barcode yang ada di link tersebut kepada panitia saat registrasi ulang ya.\n\nSampai jumpa di acara nanti! Semoga harinya menyenangkan. 🌸`;
+    const message = `Halo Kak *${p.nama_lengkap}*! \uD83D\uDC4B\n\nTerima kasih banyak telah mendaftar di acara *Jeda Sejenak Menguatkan Hati*. Kami sangat antusias menyambut kehadiran Kakak! \u2728\n\nBerikut adalah rincian E-Tiket Kakak:\n\n\uD83C\uDFAB *Nomor Tiket:* ${ticketCode}\n\u2B50 *Kategori Tiket:* ${p.jenis_tiket}\n\uD83D\uDCC5 *Waktu:* Kamis, 3 Sept 2026 (08.00 - 12.00 WITA)\n\uD83D\uDCCD *Lokasi:* Hotel Zahra Syariah, Kendari\n\n\uD83D\uDD17 *Link E-Tiket:* \n${ticketUrl}\n\nMohon siapkan dan tunjukkan barcode yang ada di link tersebut kepada panitia saat registrasi ulang ya.\n\nSampai jumpa di acara nanti! Semoga harinya menyenangkan. \uD83C\uDF38`;
     const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
     
     // Update DB
