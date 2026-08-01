@@ -3,7 +3,7 @@ import '../ticket.css';
 import { useParams } from 'react-router-dom';
 import Barcode from 'react-barcode';
 import { motion } from 'framer-motion';
-import { Info, Download, ShieldCheck, Image as ImageIcon, ExternalLink, User, Tag, Calendar, Clock, MapPin, UserPlus } from 'lucide-react';
+import { Info, Download, ShieldCheck, Image as ImageIcon, ExternalLink, User, Tag, Calendar, Clock, MapPin, UserPlus, Users } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 
@@ -209,6 +209,14 @@ const PublicTicket: React.FC = () => {
                     <span>Kategori Tiket</span>
                   </div>
                   <span className="rt-info-value highlight">{normalizeJenisTiket(participant.jenis_tiket).toUpperCase()}</span>
+                </div>
+
+                <div className="rt-info-row">
+                  <div className="rt-info-label">
+                    <Users size={16} />
+                    <span>Jumlah Tiket</span>
+                  </div>
+                  <span className="rt-info-value">{participant.jumlah_tiket} Orang</span>
                 </div>
 
                 <div className="rt-info-row">
