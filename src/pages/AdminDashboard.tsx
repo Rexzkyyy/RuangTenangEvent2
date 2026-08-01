@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import * as XLSX from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
+import { formatTicketCode } from '../utils';
 
 import {
   Download, Search, CheckCircle2, RefreshCw, Loader2,
@@ -253,7 +254,8 @@ const AdminDashboard: React.FC = () => {
 
   const sendWhatsApp = useCallback(async (p: RTParticipant) => {
     const ticketUrl = `${window.location.origin}/t/${p.id}`;
-    const message = `Halo *${p.nama_lengkap}*,\n\nTerima kasih telah mendaftar di acara kami. Berikut adalah E-Tiket Anda:\n\n*Nomor Tiket:* ${p.barcode || p.id}\n*Jenis Tiket:* ${p.jenis_tiket}\n\n*Lihat E-Tiket Resmi:* \n${ticketUrl}\n\nMohon tunjukkan barcode di link tersebut kepada panitia saat registrasi ulang. Sampai jumpa di acara Jeda Sejenak Menguatkan Hati!`;
+    const ticketCode = formatTicketCode(p.barcode || p.id || '');
+    const message = `Halo Kak *${p.nama_lengkap}*! 👋\n\nTerima kasih banyak telah mendaftar di acara *Jeda Sejenak Menguatkan Hati*. Kami sangat antusias menyambut kehadiran Kakak! ✨\n\nBerikut adalah rincian E-Tiket Kakak:\n\n🎟️ *Nomor Tiket:* ${ticketCode}\n⭐ *Kategori Tiket:* ${p.jenis_tiket}\n\n🔗 *Link E-Tiket:* \n${ticketUrl}\n\nMohon siapkan dan tunjukkan barcode yang ada di link tersebut kepada panitia saat registrasi ulang ya.\n\nSampai jumpa di acara nanti! Semoga harinya menyenangkan. 🌸`;
     const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
     
     // Update DB
