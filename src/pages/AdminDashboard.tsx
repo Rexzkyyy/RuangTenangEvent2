@@ -7,9 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   Download, Search, CheckCircle2, RefreshCw, Loader2,
   Upload, Filter, X, ChevronDown, ExternalLink,
-  ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Eye,
+  ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet,
   Users, CreditCard, CheckSquare, AlertCircle, MoreHorizontal,
-  Database, MessageCircle, Trash2, Clock, Pencil, Save,
+  Database, MessageCircle, Trash2, Pencil, Save,
 } from 'lucide-react';
 
 /* â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -31,33 +31,6 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
-/* â”€â”€â”€ Column mapping Google Sheets â†’ Supabase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-const COL_MAP: Record<string, keyof RTParticipant> = {
-  'timestamp':            'created_at',
-  'nama lengkap':         'nama_lengkap',
-  'email':                'email',
-  'no. whatsapp':         'no_whatsapp',
-  'no whatsapp':          'no_whatsapp',
-  'usia':                 'usia',
-  'jenis kelamin':        'jenis_kelamin',
-  'jenis tiket':          'jenis_tiket',
-  'dari mana':            'sumber_info',
-  'jumlah tiket':         'jumlah_tiket',
-  'tiket':                'jumlah_tiket',
-  'metode pembayaran':    'metode_pembayaran',
-  'upload bukti transfer':'bukti_transfer_url',
-  'apa yang ingin':       'tujuan_event',
-  'bukti follow':         'bukti_follow_ig_url',
-  'saya menyatakan':      'pernyataan_benar',
-};
-
-function mapHeader(raw: string): keyof RTParticipant | null {
-  const lower = raw.toLowerCase().trim();
-  for (const key of Object.keys(COL_MAP)) {
-    if (lower.startsWith(key)) return COL_MAP[key];
-  }
-  return null;
-}
 
 /* â”€â”€â”€ Stat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const StatCard: React.FC<{
