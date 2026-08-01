@@ -255,14 +255,14 @@ const AdminDashboard: React.FC = () => {
   const sendWhatsApp = useCallback(async (p: RTParticipant) => {
     const ticketUrl = `${window.location.origin}/t/${p.id}`;
     const ticketCode = formatTicketCode(p.barcode || p.id || '');
-    const waving = String.fromCodePoint(0x1F44B);
-    const sparkles = String.fromCodePoint(0x2728);
-    const ticket = String.fromCodePoint(0x1F3AB);
-    const star = String.fromCodePoint(0x2B50);
-    const calendar = String.fromCodePoint(0x1F4C5);
-    const pin = String.fromCodePoint(0x1F4CD);
-    const link = String.fromCodePoint(0x1F517);
-    const flower = String.fromCodePoint(0x1F338);
+    const waving = decodeURIComponent('%F0%9F%91%8B');
+    const sparkles = decodeURIComponent('%E2%9C%A8');
+    const ticket = decodeURIComponent('%F0%9F%8E%AB');
+    const star = decodeURIComponent('%E2%AD%90');
+    const calendar = decodeURIComponent('%F0%9F%93%85');
+    const pin = decodeURIComponent('%F0%9F%93%8D');
+    const link = decodeURIComponent('%F0%9F%94%97');
+    const flower = decodeURIComponent('%F0%9F%8C%B8');
 
     const message = `Halo Kak *${p.nama_lengkap}*! ${waving}\n\nTerima kasih banyak telah mendaftar di acara *Jeda Sejenak Menguatkan Hati*. Kami sangat antusias menyambut kehadiran Kakak! ${sparkles}\n\nBerikut adalah rincian E-Tiket Kakak:\n\n${ticket} *Nomor Tiket:* ${ticketCode}\n${star} *Kategori Tiket:* ${p.jenis_tiket}\n${calendar} *Waktu:* Kamis, 3 Sept 2026 (08.00 - 12.00 WITA)\n${pin} *Lokasi:* Hotel Zahra Syariah, Kendari\n\n${link} *Link E-Tiket:* \n${ticketUrl}\n\nMohon siapkan dan tunjukkan barcode yang ada di link tersebut kepada panitia saat registrasi ulang ya.\n\nSampai jumpa di acara nanti! Semoga harinya menyenangkan. ${flower}`;
     const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
