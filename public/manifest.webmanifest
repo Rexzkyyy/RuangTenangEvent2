@@ -1,0 +1,16 @@
+{
+  "name": "Ruang Tenang",
+  "short_name": "Ruang Tenang",
+  "description": "Aplikasi pendaftaran dan manajemen event Ruang Tenang",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

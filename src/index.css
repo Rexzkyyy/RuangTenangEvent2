@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/* ── Google Font: Inter ─────────────────────────────────── */
+/* Loaded via <link> in index.html for best performance */
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    @apply bg-gray-50 text-gray-900;
+    /* Prevent font size inflation on mobile */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent horizontal overflow on mobile */
+    overflow-x: hidden;
+  }
+
+  /* Minimum touch target size — accessibility on mobile */
+  button, a, input, select, textarea {
+    min-height: 44px;
+  }
+
+  /* Override for small icon buttons inside tables/cards */
+  button.touch-sm {
+    min-height: 32px;
+  }
+
+  /* Improve tap highlight on mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Better input behavior on iOS */
+  input, textarea, select {
+    font-size: 16px; /* Prevent iOS zoom on focus */
+  }
+}
+
+/* ── Custom scrollbar (desktop only) ───────────────────── */
+@media (hover: hover) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(124, 58, 237, 0.3);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(124, 58, 237, 0.5);
+  }
+}
+
+/* ── Utility: hide scrollbar but keep scrollable ────────── */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Select option dark mode fix ────────────────────────── */
+select option {
+  background-color: #1a1535;
+  color: #ffffff;
+}
+

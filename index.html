@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="theme-color" content="#7c3aed" />
+    <meta name="description" content="Ruang Tenang — Panel admin untuk manajemen data peserta event, import Excel, dan monitoring check-in." />
+    <title>Ruang Tenang — Admin Panel</title>
+    <!-- Preconnect for Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Unregister old service workers BEFORE any module loads -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          if (registrations.length > 0) {
+            Promise.all(registrations.map(function(r) { return r.unregister(); }))
+              .then(function() {
+                if (!sessionStorage.getItem('sw_cleared')) {
+                  sessionStorage.setItem('sw_cleared', '1');
+                  window.location.reload();
+                }
+              });
+          } else {
+            sessionStorage.removeItem('sw_cleared');
+          }
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
