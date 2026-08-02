@@ -446,7 +446,21 @@ const AdminDashboard: React.FC = () => {
           
           return p;
         });
-        setImportPreview({ rows: mapped, fileName: file.name });
+
+        // Filter duplikat di dalam file import itu sendiri
+        const deduplicatedMapped = mapped.reduce((acc, current) => {
+          const isDuplicate = acc.find(item => 
+            item.no_whatsapp === current.no_whatsapp &&
+            item.nama_lengkap?.toLowerCase() === current.nama_lengkap?.toLowerCase() &&
+            normalizeJenisTiket(item.jenis_tiket || '') === normalizeJenisTiket(current.jenis_tiket || '')
+          );
+          if (!isDuplicate) {
+            acc.push(current);
+          }
+          return acc;
+        }, [] as Partial<RTParticipant>[]);
+
+        setImportPreview({ rows: deduplicatedMapped, fileName: file.name });
       } catch {
         setImportError('Gagal membaca file. Pastikan format .xlsx atau .csv valid.');
       }
