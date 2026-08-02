@@ -452,6 +452,7 @@ const AdminDashboard: React.FC = () => {
           const isDuplicate = acc.find(item => 
             item.no_whatsapp === current.no_whatsapp &&
             item.nama_lengkap?.toLowerCase() === current.nama_lengkap?.toLowerCase() &&
+            item.email?.toLowerCase() === current.email?.toLowerCase() &&
             normalizeJenisTiket(item.jenis_tiket || '') === normalizeJenisTiket(current.jenis_tiket || '')
           );
           if (!isDuplicate) {
@@ -480,6 +481,7 @@ const AdminDashboard: React.FC = () => {
       // Cari data lama yang WA-nya sama dan namanya mirip (bisa jadi sudah ditambahkan nama tiket sebelumnya)
       const sameWaAndName = participants.filter(extP => 
         extP.no_whatsapp === newP.no_whatsapp &&
+        extP.email?.toLowerCase() === newP.email?.toLowerCase() &&
         (extP.nama_lengkap?.toLowerCase() === newP.nama_lengkap?.toLowerCase() || 
          extP.nama_lengkap?.toLowerCase().startsWith(newP.nama_lengkap?.toLowerCase() + ' '))
       );
