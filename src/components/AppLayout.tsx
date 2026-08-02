@@ -80,11 +80,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           expanded || onClose ? 'gap-3' : 'justify-center'
         }`}
       >
-        <div
-          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
-        >
-          <span className="text-white text-xs font-bold select-none">RT</span>
+        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center flex-shrink-0 ring-2 ring-violet-500/50 shadow-[0_4px_12px_rgba(0,0,0,0.5),inset_0_-2px_4px_rgba(0,0,0,0.2)]">
+          <img 
+            src="/logo_ruang_tenang.jpg-removebg-preview.png" 
+            alt="Ruang Tenang" 
+            className="w-7 h-7 object-contain drop-shadow-sm"
+          />
         </div>
         {(expanded || onClose) && (
           <div className="min-w-0">
@@ -159,8 +160,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     >
       {/* ── Desktop Sidebar ── */}
       <aside
-        className={`hidden md:flex flex-col flex-shrink-0 sticky top-0 h-screen border-r border-white/5 transition-all duration-300 ease-in-out ${
-          expanded ? 'w-56' : 'w-[60px]'
+        className={`hidden md:flex flex-col flex-shrink-0 sticky top-0 h-screen border-r border-white/5 transition-all duration-300 ease-in-out z-40 ${
+          expanded ? 'w-56' : 'w-[64px]'
         }`}
         style={{ background: 'rgba(13,11,31,0.95)' }}
       >
@@ -169,13 +170,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {/* Collapse toggle */}
         <button
           onClick={() => setExpanded(e => !e)}
-          className="absolute -right-3 top-[72px] w-6 h-6 rounded-full border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:border-violet-500/50 hover:bg-violet-500/10 transition-all z-10"
-          style={{ background: '#0d0b1f' }}
+          className="absolute -right-4 top-6 w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:border-white/20 hover:bg-white/10 transition-all shadow-xl z-50 group bg-[#1a1535]"
           title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
         >
           {expanded
-            ? <ChevronLeft  className="w-3.5 h-3.5" />
-            : <ChevronRight className="w-3.5 h-3.5" />}
+            ? <ChevronLeft  className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            : <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />}
         </button>
       </aside>
 
@@ -212,11 +212,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
-            >
-              <span className="text-white text-[9px] font-bold">RT</span>
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0 ring-2 ring-violet-500/50 shadow-[0_4px_8px_rgba(0,0,0,0.5),inset_0_-2px_4px_rgba(0,0,0,0.2)]">
+              <img 
+                src="/logo_ruang_tenang.jpg-removebg-preview.png" 
+                alt="Ruang Tenang" 
+                className="w-5 h-5 object-contain"
+              />
             </div>
             <span className="text-white font-semibold text-sm">
               {NAV_ITEMS.find(n => location.pathname.startsWith(n.to))?.label ?? 'Ruang Tenang'}

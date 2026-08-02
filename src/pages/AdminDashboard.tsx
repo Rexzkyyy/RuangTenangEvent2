@@ -3,14 +3,15 @@ import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import * as XLSX from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
-import { formatTicketCode } from '../utils';
+import { formatTicketCode, normalizeJenisTiket, currency, getHarga } from '../utils';
 
 import {
   Download, Search, CheckCircle2, RefreshCw, Loader2,
   Upload, Filter, X, ChevronDown, ExternalLink,
   ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet,
   Users, CreditCard, CheckSquare, AlertCircle, MoreHorizontal,
-  Database, MessageCircle, Trash2, Pencil, Save,
+  Database, MessageCircle, Trash2, Pencil, Save, ChevronLeft, ChevronRight,
+  Bell, User
 } from 'lucide-react';
 
 /* â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -39,53 +40,76 @@ const StatCard: React.FC<{
   value: string | number;
   icon: React.ReactNode;
   color: string;
-}> = ({ label, value, icon, color }) => (
+  chartPlaceholder?: boolean;
+}> = ({ label, value, icon, color, chartPlaceholder }) => (
   <div
-    className="rounded-2xl p-4 flex items-center gap-3 border border-white/5"
-    style={{ background: 'rgba(255,255,255,0.04)' }}
+    className="rounded-2xl p-4 sm:p-5 flex items-center justify-between border border-white/5 relative overflow-hidden group"
+    style={{ background: '#1c172e' }}
   >
-    <div
-      className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-      style={{ background: color }}
-    >
-      {icon}
+    <div className="flex items-center gap-3 sm:gap-4 relative z-10">
+      <div
+        className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+        style={{ background: color }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-white/60 text-[10px] sm:text-sm font-medium truncate mb-0.5 sm:mb-1">{label}</p>
+        <p className="text-white text-xl sm:text-3xl font-bold leading-tight">{value}</p>
+      </div>
     </div>
-    <div className="min-w-0">
-      <p className="text-white/50 text-xs font-medium truncate">{label}</p>
-      <p className="text-white text-xl sm:text-2xl font-bold leading-tight">{value}</p>
-    </div>
+    {chartPlaceholder && (
+      <div className="absolute -right-2 sm:right-4 bottom-0 opacity-30 sm:opacity-40 pointer-events-none">
+        <svg width="60" height="30" viewBox="0 0 80 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="sm:w-[80px] sm:h-[40px]">
+          <path d="M0 40L15 25L30 32L50 15L65 20L80 0V40H0Z" fill="url(#paint0_linear)" fillOpacity="0.5"/>
+          <path d="M0 40L15 25L30 32L50 15L65 20L80 0" stroke={color.includes('emerald') || color.includes('#059669') ? '#10b981' : color.includes('violet') || color.includes('#7c3aed') ? '#7c3aed' : color.includes('orange') || color.includes('#d97706') ? '#f59e0b' : '#06b6d4'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <defs>
+            <linearGradient id="paint0_linear" x1="40" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop stopColor={color.includes('emerald') || color.includes('#059669') ? '#10b981' : color.includes('violet') || color.includes('#7c3aed') ? '#7c3aed' : color.includes('orange') || color.includes('#d97706') ? '#f59e0b' : '#06b6d4'} />
+              <stop offset="1" stopColor="#1c172e" stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    )}
   </div>
 );
 
 /* â”€â”€â”€ Mobile Participant Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const ParticipantCard: React.FC<{
   p: RTParticipant;
+  index: number;
   onDetail: () => void;
   onToggle: () => void;
   onWa: () => void;
   onDelete: () => void;
-}> = ({ p, onDetail, onToggle, onWa, onDelete }) => {
+}> = ({ p, index, onDetail, onToggle, onWa, onDelete }) => {
   const isLunas = p.status_pembayaran === 'Lunas';
   const checkinPct = ((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100;
 
   return (
     <div
-      className="rounded-xl border border-white/5 p-4 mb-3"
-      style={{ background: 'rgba(255,255,255,0.03)' }}
+      className="rounded-2xl border border-white/5 p-4 mb-3"
+      style={{ background: '#1c172e' }}
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <p className="font-semibold text-white text-sm truncate">{p.nama_lengkap}</p>
-          <p className="text-xs text-white/40 truncate mt-0.5">{p.email}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-xs text-white/30">{p.no_whatsapp}</p>
+        <div className="min-w-0 flex items-start gap-3">
+          <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md bg-white/5 text-white/40 text-xs font-bold border border-white/10 mt-0.5">
+            {index}
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-white text-sm truncate">{p.nama_lengkap}</p>
+            <p className="text-xs text-white/40 truncate mt-0.5">{p.email}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-white/30">{p.no_whatsapp}</p>
             {p.status_wa && (
               <span className="text-[10px] bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20 flex items-center gap-1 font-medium">
                 <CheckCircle2 className="w-2.5 h-2.5" /> WA
               </span>
             )}
           </div>
+        </div>
         </div>
         <span
           className={`flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
@@ -102,7 +126,7 @@ const ParticipantCard: React.FC<{
       {/* Details row */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <span className="text-xs px-2 py-0.5 rounded-md text-violet-300 border border-violet-500/30 bg-violet-500/10 font-medium">
-          {p.jenis_tiket}
+          {p.jenis_tiket} {getHarga(p.jenis_tiket || '') > 0 && <span className="text-violet-400/70 font-normal">({currency(getHarga(p.jenis_tiket || ''))})</span>}
         </span>
         <span className="text-xs text-white/40">{p.jumlah_tiket} tiket</span>
         <span className="text-xs text-white/40">{p.metode_pembayaran}</span>
@@ -194,14 +218,20 @@ const AdminDashboard: React.FC = () => {
 
   /* ── Filter & Sort state ────────────────────────────────────────── */
   const [searchInput, setSearchInput]   = useState('');
-  const searchTerm = useDebounce(searchInput, 300);   // ← debounced
-  const [filterStatus, setFilterStatus] = useState<'all' | 'Lunas' | 'Pending'>('all');
+  const searchTerm = useDebounce(searchInput, 300);
+  const [activeTab, setActiveTab]       = useState<'Semua' | 'Terverifikasi' | 'Belum Lunas' | 'Sudah Hadir' | 'Belum Kirim WA' | 'Sudah Kirim WA'>('Semua');
   const [filterTiket, setFilterTiket]   = useState('');
-  const [filterKehadiran, setFilterKehadiran] = useState<'all' | 'sudah' | 'belum'>('all');
   const [sortField, setSortField]       = useState<SortField>('created_at');
   const [sortDir, setSortDir]           = useState<SortDir>('desc');
   const [showFilters, setShowFilters]   = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [openActionId, setOpenActionId] = useState<string | null>(null);
+  
+  /* ── Pagination state ───────────────────────────────────────────── */
+  const [currentPage, setCurrentPage]   = useState(1);
+  const itemsPerPage = 20;
+
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, activeTab, filterTiket, sortField, sortDir]);
 
   /* ── Modal state ────────────────────────────────────────────────── */
   const [importPreview, setImportPreview]       = useState<ImportPreview | null>(null);
@@ -309,7 +339,7 @@ const AdminDashboard: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Responses');
     XLSX.writeFile(wb, 'Data_Pendaftar_Ruang_Tenang.xlsx');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [participants, searchTerm, filterStatus, filterTiket, sortField, sortDir]);
+  }, [participants, searchTerm, activeTab, filterTiket, sortField, sortDir]);
 
   /* ── Import Excel ────────────────────────────────────────────────── */
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -412,26 +442,44 @@ const AdminDashboard: React.FC = () => {
     let updatedCount = 0;
 
     const upsertPayload = importPreview.rows.map(newP => {
-      // Pencocokan data lama (Anti-Duplicate berdasarkan Nama dan WA)
-      const match = participants.find(extP => 
-        extP.nama_lengkap?.toLowerCase() === newP.nama_lengkap?.toLowerCase() &&
-        extP.no_whatsapp === newP.no_whatsapp
+      // Cari data lama yang WA-nya sama dan namanya mirip (bisa jadi sudah ditambahkan nama tiket sebelumnya)
+      const sameWaAndName = participants.filter(extP => 
+        extP.no_whatsapp === newP.no_whatsapp &&
+        (extP.nama_lengkap?.toLowerCase() === newP.nama_lengkap?.toLowerCase() || 
+         extP.nama_lengkap?.toLowerCase().startsWith(newP.nama_lengkap?.toLowerCase() + ' '))
       );
 
-      if (match) {
-         updatedCount++;
-         // Tetap gunakan ID lama agar tidak duplikat, dan pertahankan status krusial
-         return {
-           ...newP,
-           id: match.id,
-           status_pembayaran: match.status_pembayaran,
-           jumlah_checkin: match.jumlah_checkin,
-           status_wa: match.status_wa,
-           waktu_absen: match.waktu_absen,
-           created_at: match.created_at,
-           updated_at: new Date().toISOString()
-         };
+      if (sameWaAndName.length > 0) {
+        // Apakah ada tiket yang sama persis (berdasarkan tipe tiket yang dinormalisasi)?
+        const exactMatch = sameWaAndName.find(extP => 
+          normalizeJenisTiket(extP.jenis_tiket || '') === normalizeJenisTiket(newP.jenis_tiket || '')
+        );
+
+        if (exactMatch) {
+           updatedCount++;
+           return {
+             ...newP,
+             id: exactMatch.id,
+             nama_lengkap: exactMatch.nama_lengkap, // pertahankan nama lama yang mungkin sudah ada suffix
+             status_pembayaran: exactMatch.status_pembayaran,
+             jumlah_checkin: exactMatch.jumlah_checkin,
+             status_wa: exactMatch.status_wa,
+             waktu_absen: exactMatch.waktu_absen,
+             created_at: exactMatch.created_at,
+             updated_at: new Date().toISOString()
+           };
+        } else {
+           // WA & Nama sama, TAPI Tiket BEDA -> Jadi baris baru dengan nama ditambah jenis tiket
+           newCount++;
+           const ticketSuffix = normalizeJenisTiket(newP.jenis_tiket || '');
+           return {
+             ...newP,
+             nama_lengkap: `${newP.nama_lengkap} ${ticketSuffix}`
+           };
+        }
       }
+
+      // Jika tidak ada kesamaan WA & Nama sama sekali
       newCount++;
       return newP;
     });
@@ -460,11 +508,21 @@ const AdminDashboard: React.FC = () => {
       : <ArrowDown className="w-3 h-3 text-violet-400" />;
   };
 
-  /* ── Memoized filter + sort ───────────────────────────────────────── */
+  /* ── Memoized tab counts & filter + sort ─────────────────────────── */
+  const tabCounts = useMemo(() => {
+    return {
+      'Semua': participants.length,
+      'Terverifikasi': participants.filter(p => p.status_pembayaran === 'Lunas').length,
+      'Belum Lunas': participants.filter(p => p.status_pembayaran === 'Pending').length,
+      'Sudah Hadir': participants.filter(p => (p.jumlah_checkin || 0) > 0).length,
+      'Belum Kirim WA': participants.filter(p => !p.status_wa).length,
+      'Sudah Kirim WA': participants.filter(p => p.status_wa).length,
+    };
+  }, [participants]);
+
   const filteredSorted = useMemo(() => {
     const term = searchTerm.toLowerCase();
 
-    // Pre-cache timestamps for sort (avoid re-parsing in comparator)
     const withTs = participants.map(p => ({
       p,
       ts: p.created_at ? new Date(p.created_at).getTime() : 0,
@@ -477,10 +535,16 @@ const AdminDashboard: React.FC = () => {
           || p.nama_lengkap.toLowerCase().includes(term)
           || p.email?.toLowerCase().includes(term)
           || p.no_whatsapp?.includes(term);
-        const matchStatus = filterStatus === 'all' || p.status_pembayaran === filterStatus;
+        
+        let matchTab = true;
+        if (activeTab === 'Terverifikasi') matchTab = p.status_pembayaran === 'Lunas';
+        if (activeTab === 'Belum Lunas') matchTab = p.status_pembayaran === 'Pending';
+        if (activeTab === 'Sudah Hadir') matchTab = (p.jumlah_checkin || 0) > 0;
+        if (activeTab === 'Belum Kirim WA') matchTab = !p.status_wa;
+        if (activeTab === 'Sudah Kirim WA') matchTab = !!p.status_wa;
+
         const matchTiket  = !filterTiket || p.jenis_tiket === filterTiket;
-        const matchKehadiran = filterKehadiran === 'all' || (filterKehadiran === 'sudah' ? (p.jumlah_checkin || 0) > 0 : (p.jumlah_checkin || 0) === 0);
-        return matchSearch && matchStatus && matchTiket && matchKehadiran;
+        return matchSearch && matchTab && matchTiket;
       })
       .sort((a, b) => {
         let cmp = 0;
@@ -494,7 +558,14 @@ const AdminDashboard: React.FC = () => {
         return sortDir === 'asc' ? cmp : -cmp;
       })
       .map(({ p }) => p);
-  }, [participants, searchTerm, filterStatus, filterTiket, filterKehadiran, sortField, sortDir]);
+  }, [participants, searchTerm, activeTab, filterTiket, sortField, sortDir]);
+
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredSorted.slice(start, start + itemsPerPage);
+  }, [filteredSorted, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / itemsPerPage));
 
   /* ── Stats ────────────────────────────────────────────────────────── */
   const { totalLunas, totalCheckin, jenisTiketList } = useMemo(() => ({
@@ -503,108 +574,115 @@ const AdminDashboard: React.FC = () => {
     jenisTiketList:[...new Set(participants.map(p => p.jenis_tiket).filter(Boolean))],
   }), [participants]);
 
-  const hasActiveFilters = filterStatus !== 'all' || !!filterTiket || filterKehadiran !== 'all' || !!searchInput;
+  const hasActiveFilters = !!filterTiket || !!searchInput;
 
   /* ── Render ───────────────────────────────────────────────────────── */
   return (
     <div className="min-h-full">
       {/* ── Desktop top bar ── */}
       <div
-        className="hidden md:flex sticky top-0 z-20 items-center justify-between border-b border-white/5 px-6 h-14"
-        style={{ background: 'rgba(13,11,31,0.9)', backdropFilter: 'blur(20px)' }}
+        className="hidden md:flex sticky top-0 z-20 items-center justify-between border-b border-white/5 px-6 h-16"
+        style={{ background: 'rgba(19,17,28,0.95)', backdropFilter: 'blur(20px)' }}
       >
-        <div className="flex items-center gap-2">
-          <Database className="w-4 h-4 text-violet-400" />
-          <h1 className="text-white font-semibold text-sm">Data Tiket</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-white font-bold text-lg tracking-wide">Data Tiket</h1>
         </div>
-        <button
-          onClick={fetchParticipants}
-          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition"
-          title="Refresh"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={fetchParticipants}
+            className="w-10 h-10 flex items-center justify-center rounded-xl border border-white/5 text-white/50 hover:text-white hover:bg-white/5 transition"
+            title="Refresh"
+            style={{ background: 'rgba(255,255,255,0.02)' }}
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            className="w-10 h-10 flex items-center justify-center rounded-xl border border-white/5 text-white/50 hover:text-white hover:bg-white/5 transition relative"
+            title="Notifications"
+            style={{ background: 'rgba(255,255,255,0.02)' }}
+          >
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-red-500 border-2 border-[#13111c]"></span>
+          </button>
+          <div className="flex items-center gap-3 pl-4 border-l border-white/5 cursor-pointer hover:opacity-80 transition">
+            <div className="w-9 h-9 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center overflow-hidden">
+              <User className="w-4 h-4 text-violet-400" />
+            </div>
+            <div className="hidden lg:block text-sm">
+              <p className="text-white font-semibold leading-tight">Admin RT</p>
+              <p className="text-white/40 text-xs">admin@ruangtenang.com</p>
+            </div>
+            <ChevronDown className="w-4 h-4 text-white/40 hidden lg:block ml-1" />
+          </div>
+        </div>
       </div>
 
-      <div className="px-4 sm:px-6 py-5 sm:py-6 max-w-screen-xl mx-auto">
+      <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full max-w-[1600px] mx-auto">
 
         {/* ── Stats Grid ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5 sm:mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <StatCard
-            label="Total Pendaftar"
+            label="Total Pendaftar (Peserta)"
             value={participants.length}
-            icon={<Users className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
+            icon={<Users className="w-6 h-6 text-white" />}
             color="linear-gradient(135deg,#7c3aed,#4f46e5)"
+            chartPlaceholder={true}
           />
           <StatCard
-            label="Sudah Lunas"
+            label="Sudah Lunas (Pendapatan)"
             value={totalLunas}
-            icon={<CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
+            icon={<CreditCard className="w-6 h-6 text-white" />}
             color="linear-gradient(135deg,#059669,#10b981)"
+            chartPlaceholder={true}
           />
           <StatCard
-            label="Pending"
+            label="Peserta Pending"
             value={participants.length - totalLunas}
-            icon={<AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
+            icon={<AlertCircle className="w-6 h-6 text-white" />}
             color="linear-gradient(135deg,#d97706,#f59e0b)"
+            chartPlaceholder={true}
           />
           <StatCard
-            label="Total Check-in"
+            label="Total Check-In"
             value={totalCheckin}
-            icon={<CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
+            icon={<CheckSquare className="w-6 h-6 text-white" />}
             color="linear-gradient(135deg,#0891b2,#06b6d4)"
+            chartPlaceholder={true}
           />
         </div>
 
         {/* ── Toolbar ── */}
         <div
-          className="rounded-2xl border border-white/5 p-3 sm:p-4 mb-4"
-          style={{ background: 'rgba(255,255,255,0.03)' }}
+          className="rounded-2xl border border-white/5 p-4 mb-6"
+          style={{ background: '#1c172e' }}
         >
           {/* Row 1: Search + Buttons */}
-          <div className="flex gap-2 sm:gap-3">
+          <div className="flex gap-3">
             {/* Search */}
             <div className="relative flex-1 min-w-0">
-              <Search className="w-4 h-4 text-white/30 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-white/30 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari nama, email, WA..."
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl text-white placeholder-white/25 text-sm border border-white/10 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition"
-                style={{ background: 'rgba(255,255,255,0.05)', fontSize: '16px' }}
+                className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-white/25 text-sm border border-white/10 outline-none focus:border-violet-500 transition"
+                style={{ background: 'rgba(255,255,255,0.03)', fontSize: '15px' }}
               />
             </div>
 
-            {/* Filter */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition flex-shrink-0 ${
-                showFilters
-                  ? 'border-violet-500 text-violet-400 bg-violet-500/10'
-                  : 'border-white/10 text-white/60 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Filter className="w-4 h-4" />
-              <span className="hidden sm:inline">Filter</span>
-              {hasActiveFilters && (
-                <span className="w-2 h-2 rounded-full bg-violet-400 flex-shrink-0" />
-              )}
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform hidden sm:block ${showFilters ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Desktop: Tambah + Import + Export inline | Mobile: "Actions" dropdown */}
-            <div className="hidden sm:flex items-center gap-2">
+            {/* Desktop: Import + Export */}
+            <div className="hidden sm:flex items-center gap-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border border-violet-500/40 text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 transition"
+                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium border border-violet-500/30 text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 transition"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>Import Excel</span>
               </button>
               <button
                 onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border border-emerald-500/40 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition"
+                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium border border-emerald-500/30 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition"
               >
                 <Download className="w-4 h-4" />
                 <span>Export</span>
@@ -615,28 +693,28 @@ const AdminDashboard: React.FC = () => {
             <div className="relative sm:hidden flex-shrink-0">
               <button
                 onClick={() => setShowActionsMenu(!showActionsMenu)}
-                className="flex items-center gap-1 px-3 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-white/60 hover:bg-white/5 transition"
+                className="flex items-center gap-1 px-4 py-3 rounded-xl text-sm font-medium border border-white/10 text-white/60 hover:bg-white/5 transition"
               >
-                <MoreHorizontal className="w-4 h-4" />
+                <MoreHorizontal className="w-5 h-5" />
               </button>
               {showActionsMenu && (
                 <div
-                  className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-white/10 overflow-hidden z-20 shadow-xl"
-                  style={{ background: '#1a1535' }}
+                  className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/10 overflow-hidden z-20 shadow-xl"
+                  style={{ background: '#1c172e' }}
                 >
                   <button
                     onClick={() => { fileInputRef.current?.click(); setShowActionsMenu(false); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-violet-300 hover:bg-white/5 transition text-left"
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-violet-300 hover:bg-white/5 transition text-left"
                   >
                     <FileSpreadsheet className="w-4 h-4" />
                     Import Excel
                   </button>
                   <button
                     onClick={() => { handleExportExcel(); setShowActionsMenu(false); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-300 hover:bg-white/5 transition text-left border-t border-white/5"
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-emerald-300 hover:bg-white/5 transition text-left border-t border-white/5"
                   >
                     <Download className="w-4 h-4" />
-                    Export Excel
+                    Export
                   </button>
                 </div>
               )}
@@ -651,101 +729,60 @@ const AdminDashboard: React.FC = () => {
             onChange={handleFileSelect}
           />
 
-          {/* Filter Panel */}
-          {showFilters && (
-            <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Status */}
-              <div>
-                <label className="block text-white/40 text-xs mb-1.5">Status Pembayaran</label>
-                <select
-                  value={filterStatus}
-                  onChange={e => setFilterStatus(e.target.value as 'all' | 'Lunas' | 'Pending')}
-                  className="w-full px-3 py-2.5 rounded-xl text-sm text-white border border-white/10 outline-none focus:border-violet-500 transition"
-                  style={{ background: 'rgba(255,255,255,0.07)', fontSize: '16px' }}
-                >
-                  <option value="all">Semua Status</option>
-                  <option value="Lunas">Lunas</option>
-                  <option value="Pending">Pending</option>
-                </select>
-              </div>
+          {/* Row 2: Pill Tabs */}
+          <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            <span className="text-xs font-semibold text-white/30 uppercase tracking-wider mr-2 flex items-center gap-1.5 flex-shrink-0">
+              <Filter className="w-3.5 h-3.5" /> FILTER:
+            </span>
+            {(['Semua', 'Terverifikasi', 'Belum Lunas', 'Sudah Hadir', 'Belum Kirim WA', 'Sudah Kirim WA'] as const).map(tab => {
+              const isActive = activeTab === tab;
+              const count = tabCounts[tab];
+              
+              let Icon = Users;
+              if (tab === 'Terverifikasi') Icon = CheckCircle2;
+              if (tab === 'Belum Lunas') Icon = AlertCircle;
+              if (tab === 'Sudah Hadir') Icon = CheckSquare;
+              if (tab === 'Belum Kirim WA') Icon = X;
+              if (tab === 'Sudah Kirim WA') Icon = MessageCircle;
 
-              {/* Jenis Tiket */}
-              <div>
-                <label className="block text-white/40 text-xs mb-1.5">Jenis Tiket</label>
-                <select
-                  value={filterTiket}
-                  onChange={e => setFilterTiket(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl text-sm text-white border border-white/10 outline-none focus:border-violet-500 transition"
-                  style={{ background: 'rgba(255,255,255,0.07)', fontSize: '16px' }}
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap border flex-shrink-0 ${
+                    isActive
+                      ? 'bg-violet-600 text-white border-violet-500 shadow-lg shadow-violet-500/20'
+                      : 'bg-transparent text-white/50 border-white/10 hover:bg-white/5 hover:text-white'
+                  }`}
                 >
-                  <option value="">Semua Tiket</option>
-                  {jenisTiketList.map(j => <option key={j} value={j}>{j}</option>)}
-                </select>
-              </div>
-
-              {/* Kehadiran */}
-              <div>
-                <label className="block text-white/40 text-xs mb-1.5">Kehadiran</label>
-                <select
-                  value={filterKehadiran}
-                  onChange={e => setFilterKehadiran(e.target.value as 'all' | 'sudah' | 'belum')}
-                  className="w-full px-3 py-2.5 rounded-xl text-sm text-white border border-white/10 outline-none focus:border-violet-500 transition"
-                  style={{ background: 'rgba(255,255,255,0.07)', fontSize: '16px' }}
-                >
-                  <option value="all">Semua</option>
-                  <option value="sudah">Sudah Hadir</option>
-                  <option value="belum">Belum Hadir</option>
-                </select>
-              </div>
-
-              {/* Sort Field */}
-              <div>
-                <label className="block text-white/40 text-xs mb-1.5">Urutkan berdasarkan</label>
-                <select
-                  value={sortField}
-                  onChange={e => setSortField(e.target.value as SortField)}
-                  className="w-full px-3 py-2.5 rounded-xl text-sm text-white border border-white/10 outline-none focus:border-violet-500 transition"
-                  style={{ background: 'rgba(255,255,255,0.07)', fontSize: '16px' }}
-                >
-                  <option value="created_at">Tanggal Daftar</option>
-                  <option value="nama_lengkap">Nama</option>
-                  <option value="id">ID</option>
-                </select>
-              </div>
-
-              {/* Sort Direction + Reset */}
-              <div>
-                <label className="block text-white/40 text-xs mb-1.5">Arah Urut</label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-                    className="flex-1 px-3 py-2.5 rounded-xl text-sm text-white/60 border border-white/10 hover:bg-white/5 transition"
-                    style={{ background: 'rgba(255,255,255,0.07)' }}
-                  >
-                    {sortDir === 'asc' ? '↑ A–Z' : '↓ Z–A'}
-                  </button>
-                  {hasActiveFilters && (
-                    <button
-                      onClick={() => { setFilterStatus('all'); setFilterTiket(''); setSearchInput(''); }}
-                      className="px-3 py-2.5 rounded-xl text-sm text-red-400 border border-red-500/20 hover:bg-red-500/10 transition flex-shrink-0"
-                      title="Reset Filter"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+                  <Icon className="w-3.5 h-3.5" />
+                  {tab}
+                  <span className={`text-xs px-2 py-0.5 rounded-md font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* ── Result count ── */}
-        <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-white/40 text-sm">
-            Menampilkan{' '}
-            <span className="text-white font-semibold">{filteredSorted.length}</span>
-            {' '}dari {participants.length} peserta
-          </span>
+        {/* ── Result count & Kategori Tiket ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 mt-2 px-1">
+          <div className="flex items-center gap-3">
+            <h2 className="text-white font-bold text-xl sm:text-2xl">Daftar Peserta</h2>
+            <span className="bg-violet-500 text-white text-sm font-bold px-2.5 py-1 rounded-lg shadow-lg shadow-violet-500/25">
+              {filteredSorted.length}
+            </span>
+          </div>
+          <select
+            value={filterTiket}
+            onChange={e => setFilterTiket(e.target.value)}
+            className="px-3 py-2 rounded-xl text-sm font-medium text-white/70 border border-white/10 outline-none focus:border-violet-500 transition cursor-pointer w-fit"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          >
+            <option value="" className="bg-[#1a1535]">Semua Kategori Tiket</option>
+            {jenisTiketList.map(j => <option key={j} value={j} className="bg-[#1a1535]">{j}</option>)}
+          </select>
         </div>
 
         {/* ── Mobile: Card List (< md) ── */}
@@ -755,16 +792,17 @@ const AdminDashboard: React.FC = () => {
               <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto" />
               <p className="mt-3 text-white/30 text-sm">Memuat data...</p>
             </div>
-          ) : filteredSorted.length === 0 ? (
+          ) : paginatedData.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-4xl mb-3">🔍 </div>
               <p className="text-white/30 text-sm">Tidak ada data yang cocok.</p>
             </div>
           ) : (
-            filteredSorted.map(p => (
+            paginatedData.map((p, i) => (
               <ParticipantCard
                 key={p.id}
                 p={p}
+                index={(currentPage - 1) * itemsPerPage + i + 1}
                 onDetail={() => setDetailParticipant(p)}
                 onToggle={() => toggleStatus(p.id!, p.status_pembayaran!)}
                 onWa={() => sendWhatsApp(p)}
@@ -783,148 +821,168 @@ const AdminDashboard: React.FC = () => {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-white/5">
-                  <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider">
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider w-12 text-center">No</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Nama Peserta</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">
                     <button
                       className="flex items-center gap-1.5 hover:text-white/70 transition"
                       onClick={() => handleSort('nama_lengkap')}
                     >
-                      Peserta <SortIcon field="nama_lengkap" />
+                      Kontak <SortIcon field="nama_lengkap" />
                     </button>
                   </th>
-                  <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider">Tiket</th>
-                  <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider">Pembayaran</th>
-                  <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider">Check-in</th>
-                  {filterKehadiran === 'sudah' && (
-                    <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider">Waktu Absen</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Tiket</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Pembayaran</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Check-in</th>
+                  {activeTab === 'Sudah Hadir' && (
+                    <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Waktu Absen</th>
                   )}
-                  <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider">Status WA</th>
-                  <th className="py-3 px-4 text-white/40 font-medium text-xs uppercase tracking-wider text-right">Aksi</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Status WA</th>
+                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={filterKehadiran === 'sudah' ? 7 : 6} className="text-center py-16">
+                    <td colSpan={activeTab === 'Sudah Hadir' ? 8 : 7} className="text-center py-16">
                       <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto" />
                       <p className="mt-3 text-white/30 text-sm">Memuat data...</p>
                     </td>
                   </tr>
-                ) : filteredSorted.length === 0 ? (
+                ) : paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={filterKehadiran === 'sudah' ? 7 : 6} className="text-center py-16">
+                    <td colSpan={activeTab === 'Sudah Hadir' ? 8 : 7} className="text-center py-16">
                       <div className="text-4xl mb-3">🔍 </div>
                       <p className="text-white/30 text-sm">Tidak ada data yang cocok.</p>
                     </td>
                   </tr>
                 ) : (
-                  filteredSorted.map(p => (
+                  paginatedData.map((p, i) => (
                     <tr key={p.id} className="border-b border-white/5 hover:bg-white/[0.02] transition">
-                      {/* Peserta */}
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-white">{p.nama_lengkap}</p>
-                        <p className="text-xs text-white/40 mt-0.5">{p.email}</p>
-                        <p className="text-xs text-white/30 mt-0.5">{p.no_whatsapp}</p>
+                      {/* No */}
+                      <td className="py-4 px-5 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-white/5 text-white/40 text-xs font-bold border border-white/10">
+                          {(currentPage - 1) * itemsPerPage + i + 1}
+                        </span>
+                      </td>
+                      {/* Nama Peserta */}
+                      <td className="py-4 px-5">
+                        <p className="font-semibold text-white/90">{p.nama_lengkap}</p>
+                        <p className="text-[11px] text-white/40 mt-1">{p.email}</p>
+                      </td>
+                      {/* Kontak */}
+                      <td className="py-4 px-5">
+                        <p className="text-xs text-white/70 font-medium">{p.no_whatsapp}</p>
                       </td>
                       {/* Tiket */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-block px-2 py-1 rounded-md text-xs font-semibold text-violet-300 border border-violet-500/30 bg-violet-500/10 mb-1">
-                          {p.jenis_tiket}
+                      <td className="py-4 px-5">
+                        <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold text-violet-300 bg-violet-500/10 mb-1.5">
+                          {p.jenis_tiket} {getHarga(p.jenis_tiket || '') > 0 && <span className="text-violet-400/70 font-normal">({currency(getHarga(p.jenis_tiket || ''))})</span>}
                         </span>
-                        <p className="text-xs text-white/50">{p.jumlah_tiket} tiket</p>
+                        <p className="text-[11px] text-white/40">{p.jumlah_tiket} tiket</p>
                       </td>
                       {/* Pembayaran */}
-                      <td className="py-3.5 px-4">
-                        <p className="text-xs text-white/40 mb-1">{p.metode_pembayaran}</p>
+                      <td className="py-4 px-5">
+                        <p className="text-[11px] text-white/70 font-medium mb-1.5">{p.metode_pembayaran || 'Transfer'}</p>
                         <span
-                          className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                             p.status_pembayaran === 'Lunas'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
-                              : 'bg-orange-500/15 text-orange-400 border border-orange-500/25'
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : 'bg-orange-500/15 text-orange-400'
                           }`}
                         >
                           {p.status_pembayaran === 'Lunas'
-                            ? <CheckCircle2 className="w-3 h-3" />
-                            : <Loader2 className="w-3 h-3" />}
+                            ? <CheckCircle2 className="w-2.5 h-2.5" />
+                            : <AlertCircle className="w-2.5 h-2.5" />}
                           {p.status_pembayaran}
                         </span>
                       </td>
 
                       {/* Check-in */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-14 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <td className="py-4 px-5">
+                        <div className="flex flex-col gap-1.5 w-24">
+                          <div className="flex justify-between items-center text-[10px] text-white/50">
+                            <span>0/{p.jumlah_tiket}</span>
+                            <span>{p.jumlah_checkin ?? 0}/{p.jumlah_tiket}</span>
+                          </div>
+                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                             <div
-                              className="h-full rounded-full bg-cyan-400 transition-all"
+                              className="h-full rounded-full bg-cyan-500 transition-all"
                               style={{ width: `${((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100}%` }}
                             />
                           </div>
-                          <span className="text-xs text-white/50">{p.jumlah_checkin ?? 0}/{p.jumlah_tiket}</span>
                         </div>
                       </td>
                       {/* Waktu Absen (Dynamic) */}
-                      {filterKehadiran === 'sudah' && (
+                      {activeTab === 'Sudah Hadir' && (
                         <td className="py-3.5 px-4 text-xs text-white/50">
                           {p.waktu_absen ? new Date(p.waktu_absen).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                         </td>
                       )}
                       {/* Status WA */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-4 px-5">
                         {p.status_wa ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-green-500/15 text-green-400 border border-green-500/20">
-                            <CheckCircle2 className="w-3 h-3" /> Dikirim
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-green-500/15 text-green-400 border border-green-500/20">
+                            <CheckCircle2 className="w-3 h-3" /> Terkirim
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-white/5 text-white/40 border border-white/10">
-                            Belum
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/20">
+                            <AlertCircle className="w-3 h-3" /> Belum
                           </span>
                         )}
                       </td>
                       {/* Aksi */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-3 whitespace-nowrap">
-                          <button
-                            onClick={() => setDetailParticipant(p)}
-                            className="px-2.5 h-[30px] rounded-lg text-violet-300 bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/30 transition touch-sm flex items-center gap-1.5 justify-center text-xs font-medium"
-                            title="Ubah Data"
-                          >
-                            <Pencil className="w-3.5 h-3.5 fill-current" />
-                            <span>Ubah</span>
-                          </button>
-                          <a
-                            href={`/t/${p.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-2.5 h-[30px] rounded-lg text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition touch-sm flex items-center gap-1.5 justify-center text-xs font-medium box-border"
-                            title="Lihat Tiket"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>E-Tiket</span>
-                          </a>
-                          <button
-                            onClick={() => sendWhatsApp(p)}
-                            className={`px-2.5 h-[30px] rounded-lg border transition touch-sm flex items-center gap-1.5 justify-center text-xs font-medium ${p.status_wa ? 'text-green-300 bg-green-500/20 hover:bg-green-500/30 border-green-500/30' : 'text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-500/30'}`}
-                            title="Kirim WA"
-                          >
-                            <MessageCircle className={`w-3.5 h-3.5 ${p.status_wa ? 'fill-current' : ''}`} />
-                            <span>Kirim WA</span>
-                          </button>
-                          <button
-                            onClick={() => deleteParticipant(p.id!, p.nama_lengkap)}
-                            className="px-2.5 h-[30px] rounded-lg text-red-300 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 transition touch-sm flex items-center gap-1.5 justify-center text-xs font-medium"
-                            title="Hapus Data"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 fill-current" />
-                            <span>Hapus</span>
-                          </button>
-                          {p.status_pembayaran === 'Pending' && (
-                            <button
-                              onClick={() => toggleStatus(p.id!, p.status_pembayaran!)}
-                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition touch-sm bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/20"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Lunas
-                            </button>
-                          )}
-                        </div>
+                      <td className="py-4 px-5 text-right relative">
+                        <button
+                          onClick={() => setOpenActionId(openActionId === p.id ? null : (p.id || null))}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/60 bg-white/5 hover:bg-white/10 transition text-xs font-medium border border-white/10"
+                        >
+                          Aksi <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                        
+                        {/* Dropdown Menu */}
+                        {openActionId === p.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setOpenActionId(null)} />
+                            <div className="absolute right-5 top-12 w-36 rounded-xl border border-white/10 shadow-2xl z-20 py-1.5 overflow-hidden" style={{ background: '#1c172e' }}>
+                              <button
+                                onClick={() => { setDetailParticipant(p); setOpenActionId(null); }}
+                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-white/70 hover:bg-white/5 transition flex items-center gap-2"
+                              >
+                                <Pencil className="w-3.5 h-3.5" /> Edit
+                              </button>
+                              <a
+                                href={`/t/${p.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-violet-300 hover:bg-white/5 transition flex items-center gap-2"
+                                onClick={() => setOpenActionId(null)}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" /> E-Tiket
+                              </a>
+                              <button
+                                onClick={() => { sendWhatsApp(p); setOpenActionId(null); }}
+                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-emerald-400 hover:bg-white/5 transition flex items-center gap-2"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" /> Kirim WA
+                              </button>
+                              <button
+                                onClick={() => { deleteParticipant(p.id!, p.nama_lengkap); setOpenActionId(null); }}
+                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-red-400 hover:bg-white/5 transition flex items-center gap-2 border-t border-white/5"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Hapus
+                              </button>
+                              {p.status_pembayaran === 'Pending' && (
+                                <button
+                                  onClick={() => { toggleStatus(p.id!, p.status_pembayaran!); setOpenActionId(null); }}
+                                  className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-emerald-400 hover:bg-white/5 transition flex items-center gap-2 border-t border-white/5"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Lunas
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -933,6 +991,53 @@ const AdminDashboard: React.FC = () => {
             </table>
           </div>
         </div>
+
+        {/* ── Pagination Controls ── */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6 px-1">
+            <span className="text-xs text-white/40">
+              Menampilkan {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredSorted.length)} dari {filteredSorted.length} data
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border border-white/10 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                  // Simple truncation if many pages
+                  if (totalPages > 7 && page > 2 && page < totalPages - 1 && Math.abs(page - currentPage) > 1) {
+                    if (page === 3 || page === totalPages - 2) return <span key={page} className="text-white/30 text-xs px-1">...</span>;
+                    return null;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 rounded-xl text-xs font-medium transition ${
+                        currentPage === page
+                          ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25 border border-violet-500'
+                          : 'text-white/60 hover:text-white hover:bg-white/10 border border-transparent'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-xl border border-white/10 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* â”€â”€ Import Preview Modal â”€â”€ */}

@@ -3,7 +3,7 @@ import '../ticket.css';
 import { useParams } from 'react-router-dom';
 import Barcode from 'react-barcode';
 import { motion } from 'framer-motion';
-import { Info, Download, ShieldCheck, Image as ImageIcon, ExternalLink, User, Tag, Calendar, Clock, MapPin, UserPlus, Users } from 'lucide-react';
+import { Info, Download, ShieldCheck, Image as ImageIcon, ExternalLink, User, Tag, Calendar, Clock, MapPin, UserPlus, Users, Phone } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 
@@ -289,23 +289,73 @@ const PublicTicket: React.FC = () => {
         </button>
       </div>
 
-      {/* Box Promosi untuk pendaftar baru */}
-      <div className="rt-promo-box no-print">
-        <div className="rt-promo-icon">
-          <UserPlus size={24} />
+      {/* Box Promosi Baru: Harga Tiket & Pendaftaran */}
+      <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginTop: '32px', width: '100%', maxWidth: '800px', justifyContent: 'center' }}>
+        
+        {/* Box Harga Tiket */}
+        <div style={{
+          flex: '1 1 400px',
+          background: 'rgba(10, 15, 30, 0.6)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex', flexDirection: 'column', gap: '16px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.2))' }} />
+            <span style={{ color: '#94a3b8', fontSize: '0.85rem', letterSpacing: '3px', fontWeight: 600 }}>HARGA TIKET</span>
+            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.2))' }} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', textAlign: 'center' }}>
+            {/* Reguler */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }}>
+              <span style={{ background: '#f8fafc', color: '#0f172a', padding: '4px 12px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '1px' }}>REGULER</span>
+              <span style={{ color: 'white', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '0.5px', fontFamily: 'Oswald, sans-serif' }}>110.000</span>
+              <div style={{ position: 'absolute', right: '-4px', top: '10%', bottom: '10%', width: '1px', background: 'rgba(255,255,255,0.15)' }} />
+            </div>
+            {/* Silver */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }}>
+              <span style={{ background: 'linear-gradient(to right, #e2e8f0, #94a3b8)', color: '#0f172a', padding: '4px 12px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '1px' }}>SILVER</span>
+              <span style={{ color: 'white', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '0.5px', fontFamily: 'Oswald, sans-serif' }}>150.000</span>
+              <div style={{ position: 'absolute', right: '-4px', top: '10%', bottom: '10%', width: '1px', background: 'rgba(255,255,255,0.15)' }} />
+            </div>
+            {/* Gold */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <span style={{ background: 'linear-gradient(to right, #fde047, #d97706)', color: '#0f172a', padding: '4px 12px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '1px' }}>GOLD</span>
+              <span style={{ color: 'white', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '0.5px', fontFamily: 'Oswald, sans-serif' }}>200.000</span>
+            </div>
+          </div>
         </div>
-        <div className="rt-promo-content">
-          <strong>Ingin mendaftarkan keluarga atau teman Anda?</strong>
-          <p>Tersedia tiket Reguler (110k), Silver (150k), dan Gold (200k).</p>
+
+        {/* Box Pendaftaran */}
+        <div style={{
+          flex: '0 0 250px',
+          background: 'rgba(10, 15, 30, 0.6)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex', flexDirection: 'column', gap: '16px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.2))' }} />
+            <span style={{ color: '#94a3b8', fontSize: '0.85rem', letterSpacing: '2px', fontWeight: 600 }}>PENDAFTARAN</span>
+            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.2))' }} />
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <a href="https://wa.me/6281234567890" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'white', textDecoration: 'none', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
+              <div style={{ background: '#22c55e', padding: '6px', borderRadius: '50%', display: 'flex' }}><Phone size={14} color="white" /></div>
+              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Admin 1 (Tina)</span>
+            </a>
+            <a href="https://docs.google.com/forms/d/1ZvZLPlL9oMeshBXDtCs7dmKgsXN5i4QjheQSxGudijQ/viewform" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'white', textDecoration: 'none', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', padding: '8px 12px', borderRadius: '8px', border: 'none', transition: 'opacity 0.2s', boxShadow: '0 4px 12px rgba(99,102,241,0.3)' }}>
+              <div style={{ background: 'rgba(255,255,255,0.2)', padding: '6px', borderRadius: '50%', display: 'flex' }}><ExternalLink size={14} color="white" /></div>
+              <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Link Pendaftaran</span>
+            </a>
+          </div>
         </div>
-        <a 
-          href="https://docs.google.com/forms/d/1ZvZLPlL9oMeshBXDtCs7dmKgsXN5i4QjheQSxGudijQ/viewform" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="rt-btn rt-btn-accent"
-        >
-          <ExternalLink size={16} /> Daftar Sekarang
-        </a>
       </div>
       
       <footer className="rt-footer no-print">

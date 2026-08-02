@@ -6,22 +6,17 @@ import {
   CheckCircle2, Clock, Ticket, RefreshCw,
 } from 'lucide-react';
 
+import { currency, getHarga, normalizeJenisTiket } from '../utils';
 /* ── Helpers ─────────────────────────────────────────────── */
-function currency(n: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
-}
-
-const HARGA_TIKET: Record<string, number> = {
-  'Early Bird': 75000,
-  'Regular':    100000,
-  'VIP':        150000,
-};
-
-function getHarga(jenis: string): number {
-  for (const key of Object.keys(HARGA_TIKET)) {
-    if (jenis?.toLowerCase().includes(key.toLowerCase())) return HARGA_TIKET[key];
-  }
-  return 0;
+function normalizeJenis(jenis: string): string {
+  if (!jenis) return 'Lainnya';
+  const lower = jenis.toLowerCase();
+  if (lower.includes('gold')) return 'Gold';
+  if (lower.includes('silver')) return 'Silver';
+  if (lower.includes('reguler') || lower.includes('regular')) return 'Reguler';
+  if (lower.includes('vip')) return 'VIP';
+  if (lower.includes('early bird')) return 'Early Bird';
+  return jenis;
 }
 
 /* ── Stat Card ─────────────────────────────────────────────── */
@@ -88,13 +83,13 @@ const DataPenjualan: React.FC = () => {
     /* Per jenis tiket */
     const byJenis: Record<string, { count: number; tiket: number; lunas: number; pendapatan: number }> = {};
     participants.forEach(p => {
-      const j = p.jenis_tiket || 'Lainnya';
+      const j = normalizeJenis(p.jenis_tiket);
       if (!byJenis[j]) byJenis[j] = { count: 0, tiket: 0, lunas: 0, pendapatan: 0 };
       byJenis[j].count++;
       byJenis[j].tiket  += p.jumlah_tiket || 0;
       if (p.status_pembayaran === 'Lunas') {
         byJenis[j].lunas      += p.jumlah_tiket || 0;
-        byJenis[j].pendapatan += getHarga(j) * (p.jumlah_tiket || 0);
+        byJenis[j].pendapatan += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
       }
     });
 
@@ -159,7 +154,7 @@ const DataPenjualan: React.FC = () => {
         </button>
       </div>
 
-      <div className="px-4 sm:px-6 py-5 sm:py-6 max-w-screen-lg mx-auto">
+      <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full max-w-[1600px] mx-auto">
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -223,7 +218,9 @@ const DataPenjualan: React.FC = () => {
                           <div key={jenis}>
                             <div className="flex items-center justify-between mb-1.5 gap-2">
                               <div className="min-w-0">
-                                <span className="text-white text-sm font-medium truncate block">{jenis}</span>
+                                <span className="text-white text-sm font-medium truncate block">
+                                  {jenis} {getHarga(jenis) > 0 && <span className="text-white/50 font-normal">({currency(getHarga(jenis))})</span>}
+                                </span>
                                 <span className="text-white/40 text-xs">
                                   {d.count} pendaftar · {d.tiket} tiket
                                 </span>

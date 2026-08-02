@@ -1,255 +1,611 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { ArrowLeft, Camera, CheckCircle2, XCircle, Image as ImageIcon, RefreshCcw, Keyboard, AlertTriangle } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
-import { CheckCircle2, XCircle, AlertTriangle, UserCircle2, Loader2, QrCode } from 'lucide-react';
+
+type ScanResult = {
+  success: boolean;
+  message: string;
+  type: 'success' | 'error' | 'warning';
+  participant?: RTParticipant;
+} | null;
 
 const Scanner: React.FC = () => {
-  const [scanResult, setScanResult]   = useState<string | null>(null);
-  const [participant, setParticipant] = useState<RTParticipant | null>(null);
-  const [statusMsg, setStatusMsg]     = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
-  const [loading, setLoading]         = useState(false);
-  const scannerRef                    = useRef<Html5QrcodeScanner | null>(null);
+  const navigate = useNavigate();
+  const [scanResult, setScanResult] = useState<ScanResult>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualBarcode, setManualBarcode] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    if (!scannerRef.current) {
-      scannerRef.current = new Html5QrcodeScanner(
-        'reader',
-        { fps: 10, qrbox: { width: 240, height: 240 } },
-        false,
-      );
-      scannerRef.current.render(onScanSuccess, onScanFailure);
-    }
-    return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(e => console.error(e));
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasInitialized = useRef(false);
+  
+  const isProcessingRef = useRef(false);
+  const lastScanTimestamp = useRef(0);
+  const SCAN_DEBOUNCE_MS = 2000;
 
-  const onScanSuccess = async (decodedText: string) => {
-    if (scanResult === decodedText || loading) return;
-    setScanResult(decodedText);
-    setLoading(true);
-    setStatusMsg(null);
+  const processBarcode = useCallback(async (decodedText: string) => {
+    const now = Date.now();
+    if (isProcessingRef.current || now - lastScanTimestamp.current < SCAN_DEBOUNCE_MS) return;
+
+    isProcessingRef.current = true;
+    lastScanTimestamp.current = now;
+    setIsProcessing(true);
 
     try {
-      const { data, error } = await supabase
+      if (scannerRef.current?.getState() === 2) {
+        scannerRef.current.pause(true);
+      }
+    } catch (_) {}
+
+    try {
+      const text = decodedText.trim();
+      
+      // Try by ID first, then by Barcode (since public ticket could use either)
+      let { data, error } = await supabase
         .from('rt_participants')
         .select('*')
-        .eq('id', decodedText)
+        .eq('id', text)
         .single();
-
+        
       if (error || !data) {
-        setStatusMsg({ type: 'error', text: 'Tiket tidak ditemukan di database!' });
-        setParticipant(null);
-        return;
+        const { data: bData, error: bError } = await supabase
+          .from('rt_participants')
+          .select('*')
+          .eq('barcode', text)
+          .single();
+        
+        if (bError || !bData) {
+          setScanResult({ success: false, message: 'Tiket Tidak Valid / Tidak Ditemukan!', type: 'error' });
+          return;
+        }
+        data = bData;
       }
 
-      setParticipant(data);
-
-      if (data.status_pembayaran !== 'Lunas') {
-        setStatusMsg({ type: 'warning', text: 'Status pembayaran belum LUNAS!' });
-        return;
-      }
-
-      if (data.jumlah_checkin >= data.jumlah_tiket) {
-        setStatusMsg({ type: 'error', text: 'AKSES DITOLAK: Kuota tiket sudah habis!' });
-        return;
-      }
-
-      const newCheckinCount = data.jumlah_checkin + 1;
-      const { error: updateError } = await supabase
+      // -- AUTO APPROVE LOGIC --
+      const whatsapp = data.no_whatsapp || '';
+      
+      const { data: groupData } = await supabase
         .from('rt_participants')
-        .update({ jumlah_checkin: newCheckinCount })
-        .eq('id', data.id);
+        .select('*')
+        .eq('no_whatsapp', whatsapp);
 
-      if (updateError) throw updateError;
+      const fullGroupRows = groupData || [data];
+      
+      // Check if any in group is Lunas
+      const isGroupPaid = fullGroupRows.some(r => r.status_pembayaran === 'Lunas');
 
-      setParticipant(prev => prev ? { ...prev, jumlah_checkin: newCheckinCount } : null);
-
-      const sisa = data.jumlah_tiket - newCheckinCount;
-      setStatusMsg({
-        type: 'success',
-        text: `Berhasil Check-in! (${newCheckinCount}/${data.jumlah_tiket}) — Sisa kuota: ${sisa} orang.`,
-      });
-
+      if (!isGroupPaid) {
+        setScanResult({ 
+          success: false, 
+          message: 'Status Pembayaran Rombongan Belum LUNAS!', 
+          type: 'warning',
+          participant: data 
+        });
+      } else {
+        // Individual Quota Check
+        if (data.jumlah_checkin >= data.jumlah_tiket) {
+          setScanResult({ 
+            success: false, 
+            message: `AKSES DITOLAK: Kuota tiket ini habis!`, 
+            type: 'error',
+            participant: data
+          });
+        } else {
+          // Success Path - Increment own checkin
+          const newCheckinCount = (data.jumlah_checkin || 0) + 1;
+          const waktuCheckin = new Date().toISOString();
+          
+          await supabase
+            .from('rt_participants')
+            .update({ 
+              jumlah_checkin: newCheckinCount,
+              waktu_absen: waktuCheckin // if schema supports it, harmless if not but helps tracking
+            })
+            .eq('id', data.id);
+            
+          const updatedParticipant = { ...data, jumlah_checkin: newCheckinCount };
+          const sisa = updatedParticipant.jumlah_tiket - newCheckinCount;
+            
+          setScanResult({ 
+            success: true, 
+            message: `Berhasil Check-in! (${newCheckinCount}/${updatedParticipant.jumlah_tiket}) — Sisa: ${sisa}`, 
+            type: 'success',
+            participant: updatedParticipant
+          });
+        }
+      }
     } catch (err) {
       console.error(err);
-      setStatusMsg({ type: 'error', text: 'Terjadi kesalahan sistem saat memproses tiket.' });
+      setScanResult({ success: false, message: 'Terjadi kesalahan jaringan. Coba lagi.', type: 'error' });
     } finally {
-      setLoading(false);
-      setTimeout(() => setScanResult(null), 3000);
+      isProcessingRef.current = false;
+      setIsProcessing(false);
     }
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    try {
+      if (scannerRef.current?.isScanning) {
+        await scannerRef.current.stop();
+      }
+    } catch (_) {}
+
+    if (!scannerRef.current) {
+      scannerRef.current = new Html5Qrcode('reader', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+        ],
+        verbose: false,
+      });
+    }
+
+    setCameraError(null);
+    setScanResult(null);
+    isProcessingRef.current = false;
+    lastScanTimestamp.current = 0;
+
+    const minDim = Math.min(window.innerWidth, window.innerHeight);
+    const qrboxSize = Math.min(Math.floor(minDim * 0.8), 380);
+
+    const onScan = (decodedText: string) => processBarcode(decodedText);
+
+    try {
+      await scannerRef.current.start(
+        { facingMode: 'environment' },
+        {
+          fps: 20,
+          qrbox: { width: qrboxSize, height: qrboxSize },
+          aspectRatio: window.innerHeight / window.innerWidth,
+          disableFlip: false,
+        },
+        onScan,
+        () => {}
+      );
+    } catch (err) {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          await scannerRef.current.start(
+            devices[devices.length - 1].id,
+            { fps: 20, qrbox: { width: qrboxSize, height: qrboxSize } },
+            onScan,
+            () => {}
+          );
+        } else {
+          setCameraError('Tidak ada kamera yang terdeteksi di perangkat Anda.');
+        }
+      } catch (_) {
+        setCameraError('Akses kamera ditolak. Berikan izin kamera di pengaturan browser Anda, lalu klik tombol di bawah.');
+      }
+    }
+  }, [processBarcode]);
+
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+    startCamera();
+
+    return () => {
+      (async () => {
+        try {
+          if (scannerRef.current?.isScanning) {
+            await scannerRef.current.stop();
+            scannerRef.current.clear();
+          }
+        } catch (_) {}
+      })();
+    };
+  }, []);
+
+  const resumeScanning = () => {
+    setScanResult(null);
+    isProcessingRef.current = false;
+    lastScanTimestamp.current = 0;
+    try {
+      if (scannerRef.current?.getState() === 3) {
+        scannerRef.current.resume();
+      }
+    } catch (_) {}
   };
 
-  const onScanFailure = (_error: unknown) => {
-    // silent — normal jika tidak ada QR di frame
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !scannerRef.current) return;
+
+    isProcessingRef.current = true;
+    setIsProcessing(true);
+    try {
+      const decodedText = await scannerRef.current.scanFile(file, false);
+      await processBarcode(decodedText);
+    } catch {
+      setScanResult({ success: false, message: 'QR Code/Barcode tidak terdeteksi pada gambar.', type: 'error' });
+    } finally {
+      isProcessingRef.current = false;
+      setIsProcessing(false);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleManualSubmit = () => {
+    const code = manualBarcode.trim();
+    if (!code || isProcessingRef.current) return;
+    setShowManualInput(false);
+    setManualBarcode('');
+    lastScanTimestamp.current = 0;
+    processBarcode(code);
   };
 
   return (
-    <div className="min-h-full">
-      {/* Desktop top bar */}
-      <div
-        className="hidden md:flex sticky top-0 z-20 items-center justify-between border-b border-white/5 px-6 h-14"
-        style={{ background: 'rgba(13,11,31,0.9)', backdropFilter: 'blur(20px)' }}
+    <div className="flex flex-col h-full w-full overflow-hidden bg-[#0d0b1f] font-sans">
+      {/* Header */}
+      <header
+        className="flex items-center gap-3 px-4 sm:px-6 h-14 sm:h-16 border-b border-white/5 flex-shrink-0 z-20"
+        style={{ background: 'rgba(19,17,28,0.95)', backdropFilter: 'blur(20px)' }}
       >
-        <div className="flex items-center gap-2">
-          <QrCode className="w-4 h-4 text-violet-400" />
-          <h1 className="text-white font-semibold text-sm">Scan QR Tiket</h1>
-        </div>
-        <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Live</span>
-        </div>
-      </div>
-
-      <div className="max-w-md mx-auto px-4 py-5">
-
-        {/* ── Title ── */}
-        <div className="text-center mb-5">
-          <h1 className="text-xl font-bold text-white">Scan QR Tiket</h1>
-          <p className="text-white/40 text-sm mt-1">Arahkan kamera ke QR Code peserta</p>
-        </div>
-
-        {/* ── QR Scanner Box ── */}
-        <div
-          className="rounded-2xl overflow-hidden border border-white/10 mb-5 shadow-xl"
-          style={{ background: 'rgba(255,255,255,0.03)' }}
+        <button
+          onClick={() => navigate('/admin')}
+          className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white/5 text-white/50 hover:text-white hover:bg-white/10 transition border border-white/5"
+          title="Kembali ke Dashboard"
         >
-          {/* Html5QrcodeScanner injects into this div */}
-          <div id="reader" className="w-full" />
+          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-white font-bold text-base sm:text-lg tracking-wide truncate">
+            Scanner Tiket
+          </h2>
+          <p className="text-[10px] sm:text-xs text-violet-400 mt-0.5 truncate">
+            Arahkan kamera ke QR / Barcode
+          </p>
         </div>
+        {isProcessing && (
+          <span className="text-[10px] sm:text-xs text-emerald-400 font-semibold animate-pulse flex-shrink-0">
+            ⏳ Memproses...
+          </span>
+        )}
+      </header>
 
-        {/* ── Loading ── */}
-        {loading && (
-          <div
-            className="flex items-center justify-center gap-2.5 rounded-xl border border-white/10 px-4 py-4 mb-4"
-            style={{ background: 'rgba(255,255,255,0.04)' }}
-          >
-            <Loader2 className="w-5 h-5 animate-spin text-violet-400 flex-shrink-0" />
-            <span className="text-white/60 text-sm">Memproses tiket...</span>
+      {/* Scanner Viewport */}
+      <div className="flex-1 relative w-full bg-black overflow-hidden">
+        <div
+          id="reader"
+          style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+        />
+
+        {/* Corners overlay */}
+        {!scanResult && !cameraError && (
+          <div style={{ position: 'absolute', inset: '20px', pointerEvents: 'none', zIndex: 10 }}>
+            {[
+              { top: 0, left: 0, borderTop: '4px solid #8b5cf6', borderLeft: '4px solid #8b5cf6', borderTopLeftRadius: '16px' },
+              { top: 0, right: 0, borderTop: '4px solid #8b5cf6', borderRight: '4px solid #8b5cf6', borderTopRightRadius: '16px' },
+              { bottom: 0, left: 0, borderBottom: '4px solid #8b5cf6', borderLeft: '4px solid #8b5cf6', borderBottomLeftRadius: '16px' },
+              { bottom: 0, right: 0, borderBottom: '4px solid #8b5cf6', borderRight: '4px solid #8b5cf6', borderBottomRightRadius: '16px' },
+            ].map((s, i) => (
+              <span key={i} style={{ position: 'absolute', width: '36px', height: '36px', ...s }} />
+            ))}
           </div>
         )}
 
-        {/* ── Status Banner ── */}
-        {statusMsg && (
-          <div
-            className={`rounded-2xl border-2 p-5 mb-4 text-center shadow-lg ${
-              statusMsg.type === 'success'
-                ? 'border-emerald-500/50 bg-emerald-500/10'
-                : statusMsg.type === 'error'
-                ? 'border-red-500/50 bg-red-500/10'
-                : 'border-orange-500/50 bg-orange-500/10'
-            }`}
-          >
-            <div className="flex justify-center mb-3">
-              {statusMsg.type === 'success' && <CheckCircle2 className="w-12 h-12 text-emerald-400" />}
-              {statusMsg.type === 'error'   && <XCircle      className="w-12 h-12 text-red-400" />}
-              {statusMsg.type === 'warning' && <AlertTriangle className="w-12 h-12 text-orange-400" />}
+        {/* Camera Error Overlay */}
+        {cameraError && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', zIndex: 20,
+            padding: '24px', textAlign: 'center', background: '#0d0b1f',
+          }}>
+            <div style={{ width: '72px', height: '72px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' }}>
+              <Camera size={36} color="#8b5cf6" />
             </div>
-            <p
-              className={`font-semibold text-base leading-snug ${
-                statusMsg.type === 'success' ? 'text-emerald-300'
-                : statusMsg.type === 'error' ? 'text-red-300'
-                : 'text-orange-300'
-              }`}
+            <h3 style={{ color: 'white', margin: '0 0 8px', fontSize: '1.15rem', fontWeight: 700 }}>Kamera Tidak Tersedia</h3>
+            <p style={{ color: '#94a3b8', marginBottom: '24px', fontSize: '0.9rem', lineHeight: 1.5, maxWidth: '280px' }}>{cameraError}</p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                onClick={() => startCamera()}
+                style={{ background: '#7c3aed', color: 'white', border: 'none', padding: '12px 22px', borderRadius: '50px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}
+              >
+                <Camera size={17} /> Minta Izin Kamera
+              </button>
+              <button
+                onClick={() => setShowManualInput(true)}
+                style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', padding: '12px 22px', borderRadius: '50px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}
+              >
+                <Keyboard size={17} /> Input Manual
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom Action Buttons */}
+        {!scanResult && !cameraError && (
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            padding: '20px 16px 32px',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)',
+            zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+          }}>
+            <button
+              onClick={() => startCamera()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'rgba(0,0,0,0.3)', color: 'rgba(255,255,255,0.7)',
+                border: '1px solid rgba(255,255,255,0.15)', padding: '8px 18px',
+                borderRadius: '50px', backdropFilter: 'blur(5px)',
+                fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem',
+              }}
             >
-              {statusMsg.text}
-            </p>
+              <RefreshCcw size={15} /> Restart Kamera
+            </button>
+
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} />
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowManualInput(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: 'rgba(13,11,31,0.9)', color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)', padding: '13px 20px',
+                  borderRadius: '50px', backdropFilter: 'blur(10px)',
+                  fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                }}
+              >
+                <Keyboard size={19} /> Input Manual
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', color: 'white',
+                  border: 'none', padding: '13px 20px', borderRadius: '50px',
+                  fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem',
+                  boxShadow: '0 4px 20px rgba(124,58,237,0.45)',
+                }}
+              >
+                <ImageIcon size={19} /> Scan Galeri
+              </button>
+            </div>
           </div>
         )}
 
-        {/* ── Participant Info Card ── */}
-        {participant && (
+        {/* Manual Input Modal */}
+        {showManualInput && (
           <div
-            className="rounded-2xl border border-white/10 p-5 shadow-lg"
-            style={{ background: 'rgba(255,255,255,0.04)' }}
+            onClick={(e) => e.target === e.currentTarget && setShowManualInput(false)}
+            style={{
+              position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
+              backdropFilter: 'blur(8px)', zIndex: 50,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
+              padding: '0 0 env(safe-area-inset-bottom, 0)',
+            }}
           >
-            {/* Header */}
-            <div className="flex items-center gap-3 pb-4 mb-4 border-b border-white/5">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
-              >
-                <UserCircle2 className="w-7 h-7 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="font-bold text-lg text-white leading-tight truncate">
-                  {participant.nama_lengkap}
-                </h3>
-                <p className="text-sm text-white/40 truncate">{participant.no_whatsapp}</p>
-              </div>
-            </div>
-
-            {/* Info grid */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div
-                className="rounded-xl p-3"
-                style={{ background: 'rgba(255,255,255,0.04)' }}
-              >
-                <p className="text-white/40 text-xs mb-1">Jenis Tiket</p>
-                <p className="font-semibold text-violet-300 text-sm">{participant.jenis_tiket}</p>
-              </div>
-              <div
-                className="rounded-xl p-3"
-                style={{ background: 'rgba(255,255,255,0.04)' }}
-              >
-                <p className="text-white/40 text-xs mb-1">Status Bayar</p>
-                <p
-                  className={`font-semibold text-sm ${
-                    participant.status_pembayaran === 'Lunas' ? 'text-emerald-400' : 'text-orange-400'
-                  }`}
+            <div style={{
+              background: '#1e1b4b', padding: '28px 24px 32px', borderRadius: '24px 24px 0 0',
+              width: '100%', maxWidth: '480px',
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.3)',
+              animation: 'slideUp 0.25s ease',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'white', fontWeight: 700 }}>Input Barcode Manual</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#a5b4fc' }}>Ketik ID tiket / Barcode peserta</p>
+                </div>
+                <button
+                  onClick={() => setShowManualInput(false)}
+                  style={{ background: 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', color: 'white', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {participant.status_pembayaran}
-                </p>
-              </div>
-            </div>
-
-            {/* Quota bar */}
-            <div
-              className="rounded-xl p-4"
-              style={{ background: 'rgba(255,255,255,0.04)' }}
-            >
-              <p className="text-white/40 text-xs mb-3">Kuota Penggunaan Tiket</p>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-white">{participant.jumlah_tiket}</p>
-                  <p className="text-xs text-white/40 mt-0.5">Total Beli</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-emerald-400">{participant.jumlah_checkin}</p>
-                  <p className="text-xs text-white/40 mt-0.5">Check-in</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-cyan-400">
-                    {participant.jumlah_tiket - (participant.jumlah_checkin || 0)}
-                  </p>
-                  <p className="text-xs text-white/40 mt-0.5">Sisa Kuota</p>
-                </div>
+                  <XCircle size={20} />
+                </button>
               </div>
 
-              {/* Progress bar */}
-              <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-500"
-                  style={{
-                    width: `${((participant.jumlah_checkin || 0) / (participant.jumlah_tiket || 1)) * 100}%`,
-                  }}
-                />
-              </div>
+              <input
+                type="text"
+                value={manualBarcode}
+                onChange={(e) => setManualBarcode(e.target.value)}
+                placeholder="Contoh: id-tiket-123"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') handleManualSubmit(); }}
+                style={{
+                  width: '100%', padding: '16px 18px', borderRadius: '14px',
+                  border: '2px solid rgba(255,255,255,0.1)', fontSize: '1.05rem',
+                  marginBottom: '16px', outline: 'none', boxSizing: 'border-box',
+                  background: 'rgba(0,0,0,0.2)', color: 'white',
+                  fontFamily: 'inherit', letterSpacing: '0.5px',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => (e.target.style.borderColor = '#8b5cf6')}
+                onBlur={(e) => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
+              />
+
+              <button
+                onClick={handleManualSubmit}
+                disabled={!manualBarcode.trim() || isProcessing}
+                style={{
+                  width: '100%', 
+                  background: manualBarcode.trim() ? 'linear-gradient(135deg, #7c3aed, #4f46e5)' : 'rgba(255,255,255,0.1)',
+                  color: manualBarcode.trim() ? 'white' : '#64748b',
+                  border: 'none', padding: '16px', borderRadius: '14px',
+                  fontSize: '1.05rem', fontWeight: 700, cursor: manualBarcode.trim() ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s',
+                  boxShadow: manualBarcode.trim() ? '0 6px 20px rgba(124,58,237,0.35)' : 'none',
+                }}
+              >
+                {isProcessing ? 'Memproses...' : 'Cek Tiket'}
+              </button>
             </div>
           </div>
         )}
 
-        {/* Empty state */}
-        {!participant && !loading && !statusMsg && (
-          <div className="text-center py-4">
-            <p className="text-white/20 text-sm">Belum ada tiket yang di-scan.</p>
+        {/* Scan Result Overlay */}
+        {scanResult && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.88)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 40,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            padding: '20px',
+            overflowY: 'auto',
+          }}>
+            <div style={{
+              width: '100%', maxWidth: '400px',
+              borderRadius: '28px', overflow: 'hidden',
+              boxShadow: scanResult.type === 'success'
+                ? '0 24px 60px rgba(16,185,129,0.35)'
+                : scanResult.type === 'warning'
+                ? '0 24px 60px rgba(245,158,11,0.35)'
+                : '0 24px 60px rgba(239,68,68,0.35)',
+            }}>
+
+              {/* Header card */}
+              <div style={{
+                background: scanResult.type === 'success'
+                  ? 'linear-gradient(135deg, #065f46, #059669)'
+                  : scanResult.type === 'warning'
+                  ? 'linear-gradient(135deg, #9a3412, #ea580c)'
+                  : 'linear-gradient(135deg, #7f1d1d, #dc2626)',
+                padding: '28px 24px 20px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                textAlign: 'center',
+              }}>
+                <div style={{
+                  width: '64px', height: '64px', borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.18)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: '4px',
+                }}>
+                  {scanResult.type === 'success' && <CheckCircle2 size={38} color="#6ee7b7" />}
+                  {scanResult.type === 'warning' && <AlertTriangle size={38} color="#fcd34d" />}
+                  {scanResult.type === 'error' && <XCircle size={38} color="#fca5a5" />}
+                </div>
+                <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  {scanResult.type === 'success' ? 'Check-in Berhasil' : scanResult.type === 'warning' ? 'Peringatan' : 'Gagal'}
+                </p>
+                <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
+                  {scanResult.participant?.nama_lengkap || '—'}
+                </h3>
+                {scanResult.participant?.jenis_tiket && (
+                  <span style={{
+                    background: 'rgba(255,255,255,0.2)', color: 'white',
+                    padding: '4px 14px', borderRadius: '50px', fontSize: '0.8rem', fontWeight: 600,
+                  }}>
+                    🎫 {scanResult.participant.jenis_tiket}
+                  </span>
+                )}
+              </div>
+
+              {/* Info grid */}
+              <div style={{ background: '#1e1b4b', padding: '20px 20px 0' }}>
+                {/* Status message */}
+                <div style={{
+                  background: scanResult.type === 'success' ? 'rgba(16,185,129,0.1)' 
+                            : scanResult.type === 'warning' ? 'rgba(245,158,11,0.1)'
+                            : 'rgba(239,68,68,0.1)',
+                  border: `1px solid ${scanResult.type === 'success' ? 'rgba(16,185,129,0.5)' 
+                            : scanResult.type === 'warning' ? 'rgba(245,158,11,0.5)'
+                            : 'rgba(239,68,68,0.5)'}`,
+                  borderRadius: '12px', padding: '10px 14px',
+                  marginBottom: '16px', textAlign: 'center',
+                  fontSize: '0.88rem', fontWeight: 600,
+                  color: scanResult.type === 'success' ? '#34d399' 
+                       : scanResult.type === 'warning' ? '#fbbf24'
+                       : '#f87171',
+                }}>
+                  {scanResult.message}
+                </div>
+
+                {/* Detail rows */}
+                {scanResult.participant && (
+                  <>
+                    <div style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '12px',
+                      padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}>
+                      <span style={{ fontSize: '1.1rem', marginTop: '1px' }}>📱</span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#8b5cf6', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>WhatsApp</p>
+                        <p style={{ margin: '3px 0 0', fontSize: '0.95rem', fontWeight: 500, color: 'white' }}>
+                          {scanResult.participant.no_whatsapp}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '12px',
+                      padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}>
+                      <span style={{ fontSize: '1.1rem', marginTop: '1px' }}>📊</span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#8b5cf6', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kuota Check-in</p>
+                        <p style={{ margin: '3px 0 0', fontSize: '0.95rem', fontWeight: 500, color: 'white' }}>
+                          <span style={{ color: '#10b981' }}>{scanResult.participant.jumlah_checkin || 0}</span> / {scanResult.participant.jumlah_tiket} Terpakai
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '12px',
+                      padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}>
+                      <span style={{ fontSize: '1.1rem', marginTop: '1px' }}>💰</span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#8b5cf6', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status Bayar Asli</p>
+                        <p style={{ 
+                          margin: '3px 0 0', fontSize: '0.95rem', fontWeight: 600, 
+                          color: scanResult.participant.status_pembayaran === 'Lunas' ? '#10b981' : '#fbbf24' 
+                        }}>
+                          {scanResult.participant.status_pembayaran}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Action button */}
+              <div style={{ background: '#1e1b4b', padding: '16px 20px 20px' }}>
+                <button
+                  onClick={resumeScanning}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    background: scanResult.type === 'success' ? '#059669' 
+                              : scanResult.type === 'warning' ? '#ea580c'
+                              : '#dc2626',
+                    color: 'white', border: 'none', padding: '15px',
+                    borderRadius: '14px', fontWeight: 700, cursor: 'pointer',
+                    fontSize: '1rem', boxShadow: scanResult.type === 'success'
+                      ? '0 6px 20px rgba(5,150,105,0.35)'
+                      : scanResult.type === 'warning'
+                      ? '0 6px 20px rgba(234,88,12,0.35)'
+                      : '0 6px 20px rgba(220,38,38,0.35)',
+                  }}
+                >
+                  <RefreshCcw size={18} /> Lanjut Scan
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
+        @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+        #reader > div { border: none !important; box-shadow: none !important; }
+        #reader video { object-fit: cover !important; }
+        #reader__scan_region { min-height: 0 !important; }
+        #reader__dashboard { display: none !important; }
+      `}</style>
     </div>
   );
 };

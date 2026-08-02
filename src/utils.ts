@@ -35,3 +35,29 @@ export const normalizeJenisTiket = (jenis: string) => {
   
   return jenis;
 };
+
+export const currency = (n: number) => {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
+};
+
+const HARGA_TIKET: Record<string, number> = {
+  'early bird': 75000,
+  'reguler':    110000,
+  'regular':    110000,
+  'vip':        150000,
+  'gold':       200000,
+  'silver':     150000,
+};
+
+export const getHarga = (jenis: string): number => {
+  if (!jenis) return 0;
+  const lowerJenis = jenis.toLowerCase();
+  
+  const matchK = lowerJenis.match(/(\d+)\s*k\b/);
+  if (matchK) return parseInt(matchK[1], 10) * 1000;
+
+  for (const key of Object.keys(HARGA_TIKET)) {
+    if (lowerJenis.includes(key)) return HARGA_TIKET[key];
+  }
+  return 0;
+};

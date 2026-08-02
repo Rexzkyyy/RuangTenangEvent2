@@ -34,7 +34,7 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)' }}>
-      
+
       {/* Decorative blobs */}
       <div className="absolute top-[-80px] left-[-80px] w-96 h-96 rounded-full opacity-20"
         style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
@@ -45,7 +45,7 @@ const Login: React.FC = () => {
         {/* Card */}
         <div className="rounded-2xl p-8 border border-white/10"
           style={{ background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(20px)' }}>
-          
+
           {/* Logo/Icon */}
           <div className="flex flex-col items-center mb-8">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
@@ -58,7 +58,7 @@ const Login: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-5">
-            
+
             {/* Email */}
             <div>
               <label className="block text-sm font-medium text-white/70 mb-1.5">Email</label>
