@@ -271,7 +271,14 @@ const TambahManual: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="URL Bukti Transfer">
                 <input type="url" value={form.bukti_transfer_url}
-                  onChange={e => set('bukti_transfer_url', e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setForm(prev => ({
+                      ...prev,
+                      bukti_transfer_url: val,
+                      ...(val.trim() ? { status_pembayaran: 'Lunas' } : {})
+                    }));
+                  }}
                   placeholder="https://drive.google.com/..."
                   className={inputCls} style={inputStyle} />
               </Field>

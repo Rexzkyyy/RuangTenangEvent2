@@ -421,6 +421,7 @@ const AdminDashboard: React.FC = () => {
 
           const baseNama = valNama?.toString().trim() || 'Tanpa Nama';
 
+          const buktiUrl = valBukti?.toString().trim() || '-';
           const p: Partial<RTParticipant> = {
             id:                  uuidv4(),
             created_at:          valCreated ? new Date(valCreated as string).toISOString() : new Date().toISOString(),
@@ -434,11 +435,11 @@ const AdminDashboard: React.FC = () => {
             sumber_info:         sumberInfo,
             jumlah_tiket:        finalTiket,
             metode_pembayaran:   valMetode?.toString().trim() || '-',
-            bukti_transfer_url:  valBukti?.toString().trim() || '-',
+            bukti_transfer_url:  buktiUrl,
             tujuan_event:        valTujuan?.toString().trim() || '-',
             bukti_follow_ig_url: valFollow?.toString().trim() || '-',
             pernyataan_benar:    pernyataanBenar,
-            status_pembayaran:   'Pending', // Default
+            status_pembayaran:   (buktiUrl !== '-' && buktiUrl !== '') ? 'Lunas' : 'Pending',
             jumlah_checkin:      0,         // Default
             status_wa:           false,     // Default
           };
@@ -1244,12 +1245,16 @@ const AdminDashboard: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                     <label className="block text-white/40 text-xs mb-1.5">Jenis Tiket</label>
-                    <input
-                      type="text"
+                    <select
                       value={detailParticipant.jenis_tiket || ''}
                       onChange={e => setDetailParticipant({ ...detailParticipant, jenis_tiket: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl text-sm text-white border border-white/10 focus:border-violet-500 bg-transparent outline-none transition"
-                    />
+                      className="w-full px-3 py-2.5 rounded-xl text-sm text-white border border-white/10 focus:border-violet-500 bg-[#1a1535] outline-none transition"
+                    >
+                      <option value="" disabled>-- Pilih Jenis Tiket --</option>
+                      <option value="Reguler 110K">Reguler (Rp110.000)</option>
+                      <option value="Silver 150K">Silver (Rp150.000)</option>
+                      <option value="Gold 200K">Gold (Rp200.000)</option>
+                    </select>
                 </div>
                 <div>
                     <label className="block text-white/40 text-xs mb-1.5">Jumlah Tiket</label>
