@@ -2,11 +2,12 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import {
-  Loader2, TrendingUp, CreditCard, Users,
-  CheckCircle2, Clock, Ticket, RefreshCw,
+  Loader2, TrendingUp, CreditCard,
+  Ticket, RefreshCw, Megaphone, PieChart, Activity
 } from 'lucide-react';
 
 import { currency, getHarga } from '../utils';
+
 /* ── Helpers ─────────────────────────────────────────────── */
 function normalizeJenis(jenis: string): string {
   if (!jenis) return 'Lainnya';
@@ -27,30 +28,29 @@ const SummaryCard: React.FC<{
   icon: React.ReactNode;
   color: string;
 }> = ({ label, value, sub, icon, color }) => (
-  <div
-    className="rounded-2xl p-4 sm:p-5 border border-white/5"
-    style={{ background: 'rgba(255,255,255,0.04)' }}
-  >
-    <div className="flex items-start gap-3">
-      <div
-        className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-        style={{ background: color }}
-      >
-        {icon}
+  <div className="relative overflow-hidden rounded-2xl p-5 border border-white/10 group transition-all duration-300 hover:border-white/20"
+       style={{ background: 'linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)', backdropFilter: 'blur(10px)' }}>
+    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full opacity-20 blur-2xl group-hover:opacity-30 transition-opacity duration-500" style={{ background: color }}></div>
+    <div className="relative flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="text-white/60 text-sm font-medium tracking-wide">{label}</p>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg" style={{ background: color }}>
+          {icon}
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="text-white/50 text-xs font-medium">{label}</p>
-        <p className="text-white text-xl sm:text-2xl font-bold leading-tight mt-0.5 truncate">{value}</p>
-        {sub && <p className="text-white/30 text-xs mt-0.5">{sub}</p>}
+      <div>
+        <h3 className="text-white text-2xl sm:text-3xl font-bold tracking-tight">{value}</h3>
+        {sub && <p className="text-white/40 text-xs mt-1.5 font-medium">{sub}</p>}
       </div>
     </div>
   </div>
 );
 
-/* ── Main ────────────────────────────────────────────────── */
+/* ── Main Component ──────────────────────────────────────── */
 const DataPenjualan: React.FC = () => {
   const [participants, setParticipants] = useState<RTParticipant[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [timeFilter, setTimeFilter]     = useState<'harian' | 'mingguan' | 'bulanan'>('harian');
 
   const fetchData = async () => {
     setLoading(true);
@@ -76,9 +76,11 @@ const DataPenjualan: React.FC = () => {
       return s + getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
     }, 0);
 
-    const pendapatanPotensi = participants.reduce((s, p) => {
+    const pendapatanPotensi = pending.reduce((s, p) => {
       return s + getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
     }, 0);
+
+    const konversiRate = participants.length > 0 ? ((lunas.length / participants.length) * 100).toFixed(1) : '0';
 
     /* Per jenis tiket */
     const byJenis: Record<string, { count: number; tiket: number; lunas: number; pendapatan: number }> = {};
@@ -102,21 +104,103 @@ const DataPenjualan: React.FC = () => {
       if (p.status_pembayaran === 'Lunas') byMetode[m].lunas++;
     });
 
-    /* Harian (7 hari terakhir) */
-    const now    = Date.now();
-    const oneDay = 86400000;
-    const daily: { label: string; count: number }[] = Array.from({ length: 7 }, (_, i) => {
-      const d     = new Date(now - (6 - i) * oneDay);
-      const label = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-      const count = participants.filter(p => {
-        if (!p.created_at) return false;
-        const t = new Date(p.created_at).getTime();
-        return t >= d.setHours(0, 0, 0, 0) && t < d.setHours(23, 59, 59, 999);
-      }).length;
-      return { label, count };
+    /* Per Sumber Info */
+    const bySumber: Record<string, number> = {};
+    let totalSumberResponses = 0;
+    participants.forEach(p => {
+      if (p.sumber_info && Array.isArray(p.sumber_info)) {
+        p.sumber_info.forEach((s: string) => {
+          const trimmed = s.trim();
+          if (trimmed) {
+            if (!bySumber[trimmed]) bySumber[trimmed] = 0;
+            bySumber[trimmed]++;
+            totalSumberResponses++;
+          }
+        });
+      } else if (typeof p.sumber_info === 'string') {
+        const sources = (p.sumber_info as string).split(',').map(s => s.trim()).filter(Boolean);
+        sources.forEach(s => {
+          if (!bySumber[s]) bySumber[s] = 0;
+          bySumber[s]++;
+          totalSumberResponses++;
+        });
+      }
     });
 
-    const maxDaily = Math.max(...daily.map(d => d.count), 1);
+    /* Tren (Harian/Mingguan/Bulanan) */
+    const now    = Date.now();
+    const oneDay = 86400000;
+    
+    let trendData: { label: string; count: number; revenue: number }[] = [];
+    
+    if (timeFilter === 'harian') {
+      trendData = Array.from({ length: 7 }, (_, i) => {
+        const d     = new Date(now - (6 - i) * oneDay);
+        const label = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+        
+        let count = 0;
+        let revenue = 0;
+        
+        participants.forEach(p => {
+          if (!p.created_at) return;
+          const t = new Date(p.created_at).getTime();
+          if (t >= d.setHours(0, 0, 0, 0) && t < d.setHours(23, 59, 59, 999)) {
+            count++;
+            if (p.status_pembayaran === 'Lunas') {
+              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+            }
+          }
+        });
+
+        return { label, count, revenue };
+      });
+    } else if (timeFilter === 'mingguan') {
+      trendData = Array.from({ length: 4 }, (_, i) => {
+        const dEnd = new Date(now - (3 - i) * 7 * oneDay);
+        const dStart = new Date(dEnd.getTime() - 6 * oneDay);
+        const label = `Minggu ke-${i+1}`;
+        
+        let count = 0;
+        let revenue = 0;
+        
+        participants.forEach(p => {
+          if (!p.created_at) return;
+          const t = new Date(p.created_at).getTime();
+          if (t >= dStart.setHours(0, 0, 0, 0) && t <= dEnd.setHours(23, 59, 59, 999)) {
+            count++;
+            if (p.status_pembayaran === 'Lunas') {
+              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+            }
+          }
+        });
+
+        return { label, count, revenue };
+      });
+    } else {
+      trendData = Array.from({ length: 6 }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (5 - i));
+        const label = d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' });
+        
+        let count = 0;
+        let revenue = 0;
+        
+        participants.forEach(p => {
+          if (!p.created_at) return;
+          const pt = new Date(p.created_at);
+          if (pt.getMonth() === d.getMonth() && pt.getFullYear() === d.getFullYear()) {
+            count++;
+            if (p.status_pembayaran === 'Lunas') {
+              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+            }
+          }
+        });
+
+        return { label, count, revenue };
+      });
+    }
+
+    const maxTrend = Math.max(...trendData.map(d => d.count), 1);
 
     return {
       total: participants.length,
@@ -126,119 +210,265 @@ const DataPenjualan: React.FC = () => {
       totalLunasTiket,
       pendapatanLunas,
       pendapatanPotensi,
+      konversiRate,
       byJenis,
       byMetode,
-      daily,
-      maxDaily,
+      bySumber,
+      totalSumberResponses,
+      trendData,
+      maxTrend,
     };
-  }, [participants]);
+  }, [participants, timeFilter]);
 
   /* ── Render ─────────────────────────────────────────────── */
   return (
-    <div className="min-h-full">
+    <div className="min-h-full pb-10">
       {/* Desktop top bar */}
       <div
         className="hidden md:flex sticky top-0 z-20 items-center justify-between border-b border-white/5 px-6 h-14"
         style={{ background: 'rgba(13,11,31,0.9)', backdropFilter: 'blur(20px)' }}
       >
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-violet-400" />
-          <h1 className="text-white font-semibold text-sm">Data Penjualan</h1>
+          <TrendingUp className="w-5 h-5 text-violet-400" />
+          <h1 className="text-white font-semibold text-sm tracking-wide">Analisis Penjualan</h1>
         </div>
         <button
           onClick={fetchData}
-          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition"
-          title="Refresh"
+          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition flex items-center gap-2 text-xs font-medium"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Refresh Data</span>
         </button>
       </div>
 
-      <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full max-w-[1600px] mx-auto">
+      <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-8 w-full max-w-[1600px] mx-auto space-y-6">
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
-            <p className="text-white/30 text-sm">Memuat data penjualan...</p>
+          <div className="flex flex-col items-center justify-center py-32 gap-4">
+            <Loader2 className="w-10 h-10 animate-spin text-violet-500" />
+            <p className="text-white/40 text-sm font-medium animate-pulse">Memproses analitik penjualan...</p>
           </div>
         ) : (
           <>
             {/* ── Summary Cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
-                label="Total Pendapatan"
+                label="Pendapatan Bersih"
                 value={currency(stats.pendapatanLunas)}
-                sub={`Potensi ${currency(stats.pendapatanPotensi)}`}
+                sub={`${stats.lunas} pendaftar sudah lunas`}
                 icon={<CreditCard className="w-5 h-5 text-white" />}
-                color="linear-gradient(135deg,#7c3aed,#4f46e5)"
+                color="linear-gradient(135deg, #10b981, #047857)"
               />
               <SummaryCard
-                label="Sudah Lunas"
-                value={String(stats.lunas)}
-                sub={`${stats.totalLunasTiket} tiket terbayar`}
-                icon={<CheckCircle2 className="w-5 h-5 text-white" />}
-                color="linear-gradient(135deg,#059669,#10b981)"
+                label="Potensi Pendapatan"
+                value={currency(stats.pendapatanPotensi)}
+                sub={`Dari ${stats.pending} pendaftar pending`}
+                icon={<Activity className="w-5 h-5 text-white" />}
+                color="linear-gradient(135deg, #f59e0b, #d97706)"
               />
               <SummaryCard
-                label="Pending"
-                value={String(stats.pending)}
-                sub={`${stats.totalTiket - stats.totalLunasTiket} tiket belum bayar`}
-                icon={<Clock className="w-5 h-5 text-white" />}
-                color="linear-gradient(135deg,#d97706,#f59e0b)"
+                label="Tingkat Konversi"
+                value={`${stats.konversiRate}%`}
+                sub={`Rasio Lunas vs Total (${stats.total})`}
+                icon={<PieChart className="w-5 h-5 text-white" />}
+                color="linear-gradient(135deg, #8b5cf6, #6d28d9)"
               />
               <SummaryCard
-                label="Total Tiket"
-                value={String(stats.totalTiket)}
-                sub={`dari ${stats.total} pendaftar`}
+                label="Total Tiket Terjual"
+                value={String(stats.totalLunasTiket)}
+                sub={`Dari total ${stats.totalTiket} tiket dipesan`}
                 icon={<Ticket className="w-5 h-5 text-white" />}
-                color="linear-gradient(135deg,#0891b2,#06b6d4)"
+                color="linear-gradient(135deg, #0ea5e9, #0369a1)"
               />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
-
-              {/* ── Per Jenis Tiket ── */}
-              <div
-                className="rounded-2xl border border-white/5 p-4 sm:p-5"
-                style={{ background: 'rgba(255,255,255,0.03)' }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Ticket className="w-4 h-4 text-violet-400" />
-                  <h2 className="text-white font-semibold text-sm">Penjualan per Jenis Tiket</h2>
+            {/* ── Middle Row: Daily Trend & Sumber Info ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              
+              {/* Trend Harian */}
+              <div className="lg:col-span-2 rounded-2xl border border-white/5 p-5 sm:p-6 bg-white/[0.02]">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-violet-500/20 rounded-lg">
+                      <TrendingUp className="w-5 h-5 text-violet-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-white font-semibold">Tren Pendaftaran</h2>
+                      <p className="text-white/40 text-xs mt-0.5">Pertumbuhan peserta</p>
+                    </div>
+                  </div>
+                  <select
+                    value={timeFilter}
+                    onChange={(e) => setTimeFilter(e.target.value as any)}
+                    className="bg-[#1a1535] border border-white/10 text-white/80 text-xs rounded-lg px-2 py-1.5 outline-none focus:border-violet-500/50 cursor-pointer"
+                  >
+                    <option value="harian">7 Hari Terakhir</option>
+                    <option value="mingguan">4 Minggu Terakhir</option>
+                    <option value="bulanan">6 Bulan Terakhir</option>
+                  </select>
                 </div>
+                
+                <div className="relative h-48 mt-8 mb-6">
+                  {/* SVG Chart Background */}
+                  <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                    <defs>
+                      <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(124, 58, 237, 0.4)" />
+                        <stop offset="100%" stopColor="rgba(124, 58, 237, 0)" />
+                      </linearGradient>
+                    </defs>
+                    
+                    {/* Grid lines */}
+                    <line x1="0" y1="25" x2="100" y2="25" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
+                    <line x1="0" y1="75" x2="100" y2="75" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
+                    <line x1="0" y1="100" x2="100" y2="100" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+                    
+                    {(() => {
+                      if (stats.trendData.length === 0) return null;
+                      const points = stats.trendData.map((d, i) => {
+                        const x = (i / (stats.trendData.length - 1)) * 100;
+                        const y = 100 - (stats.maxTrend > 0 ? (d.count / stats.maxTrend) * 100 : 0);
+                        return `${x},${y}`;
+                      }).join(' ');
+                      
+                      const areaPoints = `0,100 ${points} 100,100`;
+                      
+                      return (
+                        <>
+                          <polyline points={areaPoints} fill="url(#lineGrad)" />
+                          <polyline points={points} fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </>
+                      );
+                    })()}
+                  </svg>
+                  
+                  {/* Interactive Points */}
+                  <div className="absolute inset-0">
+                    {stats.trendData.map((d, i) => {
+                      const xPct = (i / (stats.trendData.length - 1)) * 100;
+                      const yPct = 100 - (stats.maxTrend > 0 ? (d.count / stats.maxTrend) * 100 : 0);
+                      const tooltipClass = i === 0 ? "items-start" : i === stats.trendData.length - 1 ? "items-end" : "items-center";
+                      
+                      return (
+                        <div key={d.label} className="absolute h-full group cursor-pointer z-10" style={{ width: '10%', left: `calc(${xPct}% - 5%)` }}>
+                          
+                          <div className={`absolute opacity-0 group-hover:opacity-100 transition-opacity flex flex-col ${tooltipClass} -top-12 z-20 pointer-events-none w-32`} style={{ left: '50%', transform: 'translateX(-50%)' }}>
+                            <span className="text-emerald-400 text-[10px] font-bold whitespace-nowrap bg-[#1a1535] px-2 py-0.5 rounded-t-md border border-white/10 border-b-0 hidden sm:block shadow-xl">
+                              {currency(d.revenue)}
+                            </span>
+                            <span className="text-white font-bold text-xs bg-[#1a1535] px-2 py-1 rounded-b-md rounded-t-md sm:rounded-t-none border border-white/10 shadow-xl whitespace-nowrap text-center">
+                              {d.count} pendaftar
+                            </span>
+                          </div>
+                          
+                          <div className="absolute w-full h-full border-x border-white/0 group-hover:border-white/5 bg-white/0 group-hover:bg-white/[0.02] transition-colors" />
+                          
+                          <div 
+                            className="absolute w-3 h-3 bg-[#1a1535] border-[2.5px] border-violet-400 rounded-full group-hover:scale-150 group-hover:bg-violet-400 transition-all duration-300 z-10 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
+                            style={{ top: `calc(${yPct}% - 6px)`, left: 'calc(50% - 6px)' }}
+                          />
+                          
+                          <div className="absolute -bottom-6 w-full text-center text-white/40 text-[10px] sm:text-xs font-medium whitespace-nowrap">
+                            {d.label.split(',')[0]}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sumber Info */}
+              <div className="rounded-2xl border border-white/5 p-5 sm:p-6 bg-white/[0.02] flex flex-col">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-pink-500/20 rounded-lg">
+                    <Megaphone className="w-5 h-5 text-pink-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold">Sumber Info</h2>
+                    <p className="text-white/40 text-xs mt-0.5">Performa kanal marketing</p>
+                  </div>
+                </div>
+
+                {Object.keys(stats.bySumber).length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <p className="text-white/30 text-sm">Belum ada data sumber info.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-5 overflow-y-auto pr-2 custom-scrollbar flex-1">
+                    {Object.entries(stats.bySumber)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([sumber, count]) => {
+                        const pct = stats.totalSumberResponses > 0 ? (count / stats.totalSumberResponses) * 100 : 0;
+                        return (
+                          <div key={sumber}>
+                            <div className="flex justify-between items-end mb-2">
+                              <span className="text-white/90 text-sm font-medium">{sumber}</span>
+                              <div className="text-right">
+                                <span className="text-white font-bold text-sm">{count}</span>
+                                <span className="text-white/40 text-[10px] ml-1">({pct.toFixed(0)}%)</span>
+                              </div>
+                            </div>
+                            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-1000"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: 'linear-gradient(90deg, #ec4899, #be185d)'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* ── Bottom Row: Ticket Types, Payment Methods, and Payment Status ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              
+              {/* Jenis Tiket */}
+              <div className="rounded-2xl border border-white/5 p-5 sm:p-6 bg-white/[0.02]">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-500/20 rounded-lg">
+                    <Ticket className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold">Performa Jenis Tiket</h2>
+                    <p className="text-white/40 text-xs mt-0.5">Pendapatan & popularitas tiket</p>
+                  </div>
+                </div>
+
                 {Object.keys(stats.byJenis).length === 0 ? (
                   <p className="text-white/30 text-sm text-center py-6">Belum ada data</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-6">
                     {Object.entries(stats.byJenis)
                       .sort((a, b) => b[1].pendapatan - a[1].pendapatan)
                       .map(([jenis, d]) => {
                         const pct = stats.totalTiket > 0 ? (d.tiket / stats.totalTiket) * 100 : 0;
                         return (
-                          <div key={jenis}>
-                            <div className="flex items-center justify-between mb-1.5 gap-2">
-                              <div className="min-w-0">
-                                <span className="text-white text-sm font-medium truncate block">
-                                  {jenis} {getHarga(jenis) > 0 && <span className="text-white/50 font-normal">({currency(getHarga(jenis))})</span>}
-                                </span>
-                                <span className="text-white/40 text-xs">
-                                  {d.count} pendaftar · {d.tiket} tiket
-                                </span>
+                          <div key={jenis} className="group">
+                            <div className="flex items-start justify-between mb-2 gap-4">
+                              <div>
+                                <h3 className="text-white font-semibold">{jenis}</h3>
+                                <p className="text-white/40 text-xs mt-0.5">{d.count} pendaftar &middot; {d.tiket} tiket dipesan</p>
                               </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="text-emerald-400 text-sm font-semibold">
-                                  {currency(d.pendapatan)}
-                                </p>
-                                <p className="text-white/30 text-xs">{d.lunas} lunas</p>
+                              <div className="text-right">
+                                <p className="text-emerald-400 font-bold">{currency(d.pendapatan)}</p>
+                                <p className="text-white/40 text-xs mt-0.5">{d.lunas} lunas</p>
                               </div>
                             </div>
-                            {/* Progress bar */}
-                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-2 bg-white/5 rounded-full overflow-hidden relative">
                               <div
-                                className="h-full rounded-full transition-all duration-500"
+                                className="absolute top-0 left-0 h-full rounded-full transition-all duration-1000"
                                 style={{
                                   width: `${pct}%`,
-                                  background: 'linear-gradient(90deg, #7c3aed, #4f46e5)',
+                                  background: 'linear-gradient(90deg, #3b82f6, #2563eb)'
                                 }}
                               />
                             </div>
@@ -249,42 +479,46 @@ const DataPenjualan: React.FC = () => {
                 )}
               </div>
 
-              {/* ── Per Metode Pembayaran ── */}
-              <div
-                className="rounded-2xl border border-white/5 p-4 sm:p-5"
-                style={{ background: 'rgba(255,255,255,0.03)' }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <CreditCard className="w-4 h-4 text-emerald-400" />
-                  <h2 className="text-white font-semibold text-sm">Metode Pembayaran</h2>
+              {/* Metode Pembayaran */}
+              <div className="rounded-2xl border border-white/5 p-5 sm:p-6 bg-white/[0.02]">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-emerald-500/20 rounded-lg">
+                    <CreditCard className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold">Metode Pembayaran</h2>
+                    <p className="text-white/40 text-xs mt-0.5">Preferensi transaksi peserta</p>
+                  </div>
                 </div>
+
                 {Object.keys(stats.byMetode).length === 0 ? (
                   <p className="text-white/30 text-sm text-center py-6">Belum ada data</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-6">
                     {Object.entries(stats.byMetode)
                       .sort((a, b) => b[1].count - a[1].count)
                       .map(([metode, d]) => {
-                        const pct     = stats.total > 0 ? (d.count / stats.total) * 100 : 0;
+                        const pct = stats.total > 0 ? (d.count / stats.total) * 100 : 0;
                         const lunasPct = d.count > 0 ? Math.round((d.lunas / d.count) * 100) : 0;
                         return (
                           <div key={metode}>
-                            <div className="flex items-center justify-between mb-1.5 gap-2">
-                              <div className="min-w-0">
-                                <span className="text-white text-sm font-medium truncate block">{metode}</span>
-                                <span className="text-white/40 text-xs">{d.count} transaksi</span>
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h3 className="text-white font-medium">{metode}</h3>
+                                <p className="text-white/40 text-xs mt-0.5">{d.count} transaksi total</p>
                               </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="text-white text-sm font-semibold">{lunasPct}%</p>
-                                <p className="text-white/30 text-xs">lunas</p>
+                              <div className="text-right">
+                                <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-md font-semibold border border-emerald-500/20">
+                                  {lunasPct}% Lunas
+                                </span>
                               </div>
                             </div>
-                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                               <div
-                                className="h-full rounded-full transition-all duration-500"
+                                className="h-full rounded-full transition-all duration-1000"
                                 style={{
                                   width: `${pct}%`,
-                                  background: 'linear-gradient(90deg, #059669, #10b981)',
+                                  background: 'linear-gradient(90deg, #10b981, #059669)'
                                 }}
                               />
                             </div>
@@ -294,48 +528,68 @@ const DataPenjualan: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Status Pembayaran (Pie Chart) */}
+              <div className="rounded-2xl border border-white/5 p-5 sm:p-6 bg-white/[0.02] flex flex-col">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-amber-500/20 rounded-lg">
+                    <PieChart className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold">Status Pembayaran</h2>
+                    <p className="text-white/40 text-xs mt-0.5">Proporsi Lunas vs Pending</p>
+                  </div>
+                </div>
+
+                {stats.total === 0 ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <p className="text-white/30 text-sm">Belum ada data</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center flex-1 w-full relative">
+                    <div className="relative w-40 h-40">
+                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                        {/* Background Circle (Pending) */}
+                        <circle cx="50" cy="50" r="40" fill="transparent" stroke="rgba(245, 158, 11, 0.2)" strokeWidth="12" />
+                        {/* Foreground Circle (Lunas) */}
+                        <circle 
+                          cx="50" cy="50" r="40" 
+                          fill="transparent" 
+                          stroke="#10b981" 
+                          strokeWidth="12" 
+                          strokeDasharray={`${(stats.lunas / stats.total) * 251.2} 251.2`} 
+                          strokeLinecap="round"
+                          className="transition-all duration-1000 ease-out"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-white font-bold text-2xl">{stats.konversiRate}%</span>
+                        <span className="text-white/40 text-xs">Lunas</span>
+                      </div>
+                    </div>
+
+                    <div className="w-full mt-8 space-y-3 px-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                          <span className="text-white/80 font-medium">Lunas</span>
+                        </div>
+                        <span className="text-white font-bold">{stats.lunas} <span className="text-white/30 text-xs font-normal">tiket</span></span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-amber-500/40 border border-amber-500/50"></div>
+                          <span className="text-white/80 font-medium">Pending</span>
+                        </div>
+                        <span className="text-white font-bold">{stats.pending} <span className="text-white/30 text-xs font-normal">tiket</span></span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
 
-            {/* ── Grafik Pendaftaran 7 Hari ── */}
-            <div
-              className="rounded-2xl border border-white/5 p-4 sm:p-5"
-              style={{ background: 'rgba(255,255,255,0.03)' }}
-            >
-              <div className="flex items-center gap-2 mb-5">
-                <Users className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-white font-semibold text-sm">Pendaftaran 7 Hari Terakhir</h2>
-              </div>
-              <div className="flex items-end gap-2 sm:gap-3 h-28">
-                {stats.daily.map(({ label, count }) => {
-                  const heightPct = (count / stats.maxDaily) * 100;
-                  return (
-                    <div key={label} className="flex-1 flex flex-col items-center gap-1.5">
-                      <span className="text-white/60 text-xs font-semibold">
-                        {count > 0 ? count : ''}
-                      </span>
-                      <div className="w-full rounded-t-lg overflow-hidden" style={{ height: '80px' }}>
-                        <div
-                          className="w-full rounded-t-lg transition-all duration-700"
-                          style={{
-                            height: count > 0 ? `${heightPct}%` : '4px',
-                            background: count > 0
-                              ? 'linear-gradient(to top, #4f46e5, #7c3aed)'
-                              : 'rgba(255,255,255,0.05)',
-                            marginTop: `${100 - (count > 0 ? heightPct : 5)}%`,
-                          }}
-                        />
-                      </div>
-                      <span className="text-white/30 text-[10px] text-center leading-tight hidden sm:block">
-                        {label.split(',')[0]}
-                      </span>
-                      <span className="text-white/30 text-[10px] text-center leading-tight sm:hidden">
-                        {label.split(' ')[0]}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </>
         )}
       </div>

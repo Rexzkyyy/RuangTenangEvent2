@@ -76,6 +76,18 @@ const StatCard: React.FC<{
 );
 
 /* â”€â”€â”€ Mobile Participant Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Helpers ─────────────────────────────────────────────── */
+function normalizeJenis(jenis: string): string {
+  if (!jenis) return 'Lainnya';
+  const lower = jenis.toLowerCase();
+  if (lower.includes('gold')) return 'Gold';
+  if (lower.includes('silver')) return 'Silver';
+  if (lower.includes('reguler') || lower.includes('regular')) return 'Reguler';
+  if (lower.includes('vip')) return 'VIP';
+  if (lower.includes('early bird')) return 'Early Bird';
+  return jenis;
+}
+
 const ParticipantCard: React.FC<{
   p: RTParticipant;
   index: number;
@@ -227,6 +239,11 @@ const AdminDashboard: React.FC = () => {
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   
+  /* ── Notification & Session state ───────────────────────────────── */
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [hasReadNotifications, setHasReadNotifications] = useState(false);
+  const [session, setSession] = useState<any>(null);
+  
   /* ── Pagination state ───────────────────────────────────────────── */
   const [currentPage, setCurrentPage]   = useState(1);
   const itemsPerPage = 20;
@@ -270,7 +287,10 @@ const AdminDashboard: React.FC = () => {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchParticipants(); }, [fetchParticipants]);
+  useEffect(() => { 
+    fetchParticipants(); 
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+  }, [fetchParticipants]);
 
   /* ── Toggle Status ────────────────────────────────────────────────── */
   const toggleStatus = useCallback(async (id: string, currentStatus: string) => {
@@ -543,7 +563,7 @@ const AdminDashboard: React.FC = () => {
         if (activeTab === 'Belum Kirim WA') matchTab = !p.status_wa;
         if (activeTab === 'Sudah Kirim WA') matchTab = !!p.status_wa;
 
-        const matchTiket  = !filterTiket || p.jenis_tiket === filterTiket;
+        const matchTiket  = !filterTiket || normalizeJenis(p.jenis_tiket || '') === filterTiket;
         return matchSearch && matchTab && matchTiket;
       })
       .sort((a, b) => {
@@ -571,10 +591,17 @@ const AdminDashboard: React.FC = () => {
   const { totalLunas, totalCheckin, jenisTiketList } = useMemo(() => ({
     totalLunas:    participants.filter(p => p.status_pembayaran === 'Lunas').length,
     totalCheckin:  participants.reduce((s, p) => s + (p.jumlah_checkin || 0), 0),
-    jenisTiketList:[...new Set(participants.map(p => p.jenis_tiket).filter(Boolean))],
+    jenisTiketList:[...new Set(participants.map(p => normalizeJenis(p.jenis_tiket || '')).filter(Boolean))],
   }), [participants]);
 
+  /* ── Notifications Logic ────────────────────────────────────────── */
+  const newParticipantsToday = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return participants.filter(p => p.created_at && new Date(p.created_at) >= today).length;
+  }, [participants]);
 
+  const hasUnread = newParticipantsToday > 0 && !hasReadNotifications;
 
   /* ── Render ───────────────────────────────────────────────────────── */
   return (
@@ -596,23 +623,64 @@ const AdminDashboard: React.FC = () => {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
-            className="w-10 h-10 flex items-center justify-center rounded-xl border border-white/5 text-white/50 hover:text-white hover:bg-white/5 transition relative"
-            title="Notifications"
-            style={{ background: 'rgba(255,255,255,0.02)' }}
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-red-500 border-2 border-[#13111c]"></span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setHasReadNotifications(true);
+              }}
+              className={`w-10 h-10 flex items-center justify-center rounded-xl border border-white/5 text-white/50 hover:text-white hover:bg-white/5 transition relative ${hasUnread ? 'animate-goyang text-white' : ''}`}
+              title="Notifications"
+              style={{ background: 'rgba(255,255,255,0.02)' }}
+            >
+              <Bell className="w-4 h-4" />
+              {hasUnread && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-red-500 border-2 border-[#13111c]"></span>
+              )}
+            </button>
+
+            {/* Notification Dropdown */}
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-72 bg-[#1a1535] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div className="p-3 border-b border-white/10 bg-white/5 flex justify-between items-center">
+                  <h3 className="text-white text-sm font-semibold">Notifikasi</h3>
+                  {newParticipantsToday > 0 && (
+                    <span className="bg-sky-500/20 text-sky-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                      {newParticipantsToday} Baru
+                    </span>
+                  )}
+                </div>
+                <div className="p-4">
+                  {newParticipantsToday > 0 ? (
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
+                        <Users className="w-5 h-5 text-sky-400" />
+                      </div>
+                      <div>
+                        <p className="text-white text-sm font-medium">Data Pendaftar Baru</p>
+                        <p className="text-white/60 text-xs mt-1 leading-relaxed">
+                          Ada <strong className="text-white">{newParticipantsToday}</strong> data pendaftar baru yang masuk hari ini.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <CheckCircle2 className="w-8 h-8 text-white/20 mx-auto mb-2" />
+                      <p className="text-white/40 text-xs">Belum ada data pendaftar baru hari ini.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-3 pl-4 border-l border-white/5 cursor-pointer hover:opacity-80 transition">
             <div className="w-9 h-9 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center overflow-hidden">
               <User className="w-4 h-4 text-violet-400" />
             </div>
             <div className="hidden lg:block text-sm">
               <p className="text-white font-semibold leading-tight">Admin RT</p>
-              <p className="text-white/40 text-xs">admin@ruangtenang.com</p>
+              <p className="text-white/40 text-xs">{session?.user?.email || 'admin@ruangtenang.com'}</p>
             </div>
-            <ChevronDown className="w-4 h-4 text-white/40 hidden lg:block ml-1" />
           </div>
         </div>
       </div>
