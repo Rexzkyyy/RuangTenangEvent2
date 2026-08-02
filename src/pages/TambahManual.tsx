@@ -59,6 +59,19 @@ const TambahManual: React.FC = () => {
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Custom states for the new UI fields
+  const [metodeOption, setMetodeOption] = useState<string>('');
+  const [metodeOther, setMetodeOther]   = useState<string>('');
+
+  const [sumberOptions, setSumberOptions] = useState<string[]>([]);
+  const [sumberOther, setSumberOther]     = useState<string>('');
+
+  const handleSumberToggle = (option: string) => {
+    setSumberOptions(prev => 
+      prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]
+    );
+  };
+
   const set = (field: string, value: string | boolean) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
@@ -79,15 +92,13 @@ const TambahManual: React.FC = () => {
       jenis_kelamin:       form.jenis_kelamin,
       jenis_tiket:         form.jenis_tiket.trim(),
       jumlah_tiket:        parseInt(form.jumlah_tiket || '1', 10),
-      metode_pembayaran:   form.metode_pembayaran.trim(),
+      metode_pembayaran:   (metodeOption === 'Other' ? metodeOther : metodeOption).trim(),
       status_pembayaran:   form.status_pembayaran,
       tujuan_event:        form.tujuan_event.trim(),
       bukti_transfer_url:  form.bukti_transfer_url.trim(),
       bukti_follow_ig_url: form.bukti_follow_ig_url.trim(),
       pernyataan_benar:    form.pernyataan_benar,
-      sumber_info:         form.sumber_info
-        ? form.sumber_info.split(',').map(s => s.trim()).filter(Boolean)
-        : [],
+      sumber_info:         [...sumberOptions, ...(sumberOther.trim() ? [sumberOther.trim()] : [])],
       jumlah_checkin: 0,
       barcode:        uuidv4(),
     };
@@ -217,10 +228,26 @@ const TambahManual: React.FC = () => {
                 className={inputCls} style={inputStyle} />
             </Field>
             <Field label="Metode Pembayaran">
-              <input type="text" value={form.metode_pembayaran}
-                onChange={e => set('metode_pembayaran', e.target.value)}
-                placeholder="Transfer BCA / QRIS / Tunai"
-                className={inputCls} style={inputStyle} />
+              <select value={metodeOption}
+                onChange={e => {
+                  setMetodeOption(e.target.value);
+                  if (e.target.value !== 'Other') setMetodeOther('');
+                }}
+                className={inputCls} style={inputStyle}>
+                <option value="" disabled>-- Pilih Metode --</option>
+                <option value="M-Bangking">M-Bangking</option>
+                <option value="E-Wallet">E-Wallet</option>
+                <option value="Other">Other (Tulis sendiri)</option>
+              </select>
+              {metodeOption === 'Other' && (
+                <input type="text"
+                  value={metodeOther}
+                  onChange={e => setMetodeOther(e.target.value)}
+                  placeholder="Ketik metode pembayaran..."
+                  className={`${inputCls} mt-3`} style={inputStyle}
+                  autoFocus
+                />
+              )}
             </Field>
             <Field label="Status Pembayaran">
               <select value={form.status_pembayaran}
@@ -255,11 +282,39 @@ const TambahManual: React.FC = () => {
                   className={inputCls} style={inputStyle} />
               </Field>
             </div>
-            <Field label="Sumber Info">
-              <input type="text" value={form.sumber_info}
-                onChange={e => set('sumber_info', e.target.value)}
-                placeholder="Instagram, Teman, WhatsApp (pisah koma)"
-                className={inputCls} style={inputStyle} />
+            <Field label="Sumber Info (Boleh pilih lebih dari satu)">
+              <div className="flex flex-wrap gap-x-6 gap-y-3 mt-2">
+                {['Tiktok', 'Instagram', 'WhatsApp', 'Facebook', 'Komunitas', 'Teman/Keluarga', 'Other'].map(opt => (
+                  <label key={opt} className="flex items-center gap-3 cursor-pointer text-sm text-white/80">
+                    <input type="checkbox"
+                      checked={opt === 'Other' ? sumberOther !== '' || sumberOptions.includes('Other') : sumberOptions.includes(opt)}
+                      onChange={(e) => {
+                        if (opt === 'Other') {
+                          if (!e.target.checked) setSumberOther('');
+                          handleSumberToggle('Other');
+                        } else {
+                          handleSumberToggle(opt);
+                        }
+                      }}
+                      className="w-4 h-4 rounded text-sky-500 bg-white/5 border-white/20 focus:ring-sky-500/50" />
+                    {opt === 'Other' ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <span>Other:</span>
+                        <input type="text"
+                          value={sumberOther}
+                          onChange={(e) => {
+                            if (!sumberOptions.includes('Other')) handleSumberToggle('Other');
+                            setSumberOther(e.target.value);
+                          }}
+                          className="flex-1 min-w-[120px] bg-transparent border-b border-white/20 focus:border-sky-500 outline-none px-1 py-0.5 text-white/90"
+                        />
+                      </div>
+                    ) : (
+                      <span>{opt}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
             </Field>
 
             {/* Pernyataan checkbox */}
