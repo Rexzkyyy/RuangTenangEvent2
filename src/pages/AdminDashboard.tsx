@@ -10,7 +10,7 @@ import {
   Upload, Filter, X, ChevronDown, ExternalLink,
   ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet,
   Users, CreditCard, CheckSquare, AlertCircle, MoreHorizontal,
-  Database, MessageCircle, Trash2, Pencil, Save, ChevronLeft, ChevronRight,
+  MessageCircle, Trash2, Pencil, Save, ChevronLeft, ChevronRight,
   Bell, User
 } from 'lucide-react';
 
@@ -223,7 +223,7 @@ const AdminDashboard: React.FC = () => {
   const [filterTiket, setFilterTiket]   = useState('');
   const [sortField, setSortField]       = useState<SortField>('created_at');
   const [sortDir, setSortDir]           = useState<SortDir>('desc');
-  const [showFilters, setShowFilters]   = useState(false);
+
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   
@@ -574,7 +574,7 @@ const AdminDashboard: React.FC = () => {
     jenisTiketList:[...new Set(participants.map(p => p.jenis_tiket).filter(Boolean))],
   }), [participants]);
 
-  const hasActiveFilters = !!filterTiket || !!searchInput;
+
 
   /* ── Render ───────────────────────────────────────────────────────── */
   return (

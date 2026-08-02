@@ -6,7 +6,7 @@ import {
   CheckCircle2, Clock, Ticket, RefreshCw,
 } from 'lucide-react';
 
-import { currency, getHarga, normalizeJenisTiket } from '../utils';
+import { currency, getHarga } from '../utils';
 /* ── Helpers ─────────────────────────────────────────────── */
 function normalizeJenis(jenis: string): string {
   if (!jenis) return 'Lainnya';
