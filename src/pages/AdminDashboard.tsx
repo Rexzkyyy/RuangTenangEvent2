@@ -428,9 +428,9 @@ const AdminDashboard: React.FC = () => {
 
           const buktiUrl = valBukti?.toString().trim() || '-';
           
-          if (cleanedWa === '-' || cleanedWa.length < 10 || cleanedWa.length > 15) {
+          if (cleanedWa === '-' || cleanedWa.length < 10 || cleanedWa.length > 15 || !cleanedWa.startsWith('628')) {
             rejectedWaCount++;
-            return null; // Abaikan data jika nomor WA tidak valid / terlalu pendek
+            return null; // Abaikan data jika nomor WA tidak valid / bukan nomor HP Indonesia
           }
 
           const p: Partial<RTParticipant> = {
@@ -461,9 +461,8 @@ const AdminDashboard: React.FC = () => {
         // Filter duplikat di dalam file import itu sendiri
         const deduplicatedMapped = mapped.reduce((acc, current) => {
           const isDuplicate = acc.find(item => 
-            item.no_whatsapp === current.no_whatsapp &&
-            normalizeJenis(item.jenis_tiket || '') === normalizeJenis(current.jenis_tiket || '') &&
-            item.nama_lengkap?.toLowerCase() === current.nama_lengkap?.toLowerCase()
+            String(item.no_whatsapp || '').replace(/\\D/g, '') === String(current.no_whatsapp || '').replace(/\\D/g, '') &&
+            normalizeJenis(item.jenis_tiket || '') === normalizeJenis(current.jenis_tiket || '')
           );
           if (isDuplicate) {
             // Timpa data lama dengan data terbaru dari Excel (Jangan ditambah)
@@ -496,11 +495,10 @@ const AdminDashboard: React.FC = () => {
     const upsertPayload: Partial<RTParticipant>[] = [];
 
     importPreview.rows.forEach(newP => {
-      // Cari data lama yang WA, JENIS TIKET, dan NAMA-nya sama persis
+      // Cari data lama yang WA (abaikan karakter non-angka seperti +) dan JENIS TIKET-nya sama
       const exactMatch = participants.find(extP => 
-        extP.no_whatsapp === newP.no_whatsapp &&
-        normalizeJenis(extP.jenis_tiket || '') === normalizeJenis(newP.jenis_tiket || '') &&
-        extP.nama_lengkap?.toLowerCase() === newP.nama_lengkap?.toLowerCase()
+        String(extP.no_whatsapp || '').replace(/\\D/g, '') === String(newP.no_whatsapp || '').replace(/\\D/g, '') &&
+        normalizeJenis(extP.jenis_tiket || '') === normalizeJenis(newP.jenis_tiket || '')
       );
 
       if (exactMatch) {
