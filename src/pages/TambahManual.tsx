@@ -84,10 +84,45 @@ const TambahManual: React.FC = () => {
     }
     setLoading(true);
 
+    const cleanedWa = form.no_whatsapp.trim().replace(/\D/g, '');
+    let finalWa = cleanedWa;
+    if (finalWa.startsWith('0')) finalWa = '62' + finalWa.substring(1);
+    else if (finalWa.startsWith('8')) finalWa = '62' + finalWa;
+
+    if (finalWa.length < 10 || finalWa.length > 15) {
+      setError('Nomor WhatsApp tidak valid (harus 10-15 digit angka).');
+      setLoading(false);
+      return;
+    }
+
+    // Opsi B: Boleh WA yang sama, ASAL jenis tiket BERBEDA
+    const { data: existingData, error: checkErr } = await supabase
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+      .select('id, jenis_tiket')
+      .eq('no_whatsapp', finalWa);
+
+    if (checkErr) {
+      setError(`Gagal mengecek data: ${checkErr.message}`);
+      setLoading(false);
+      return;
+    }
+
+    if (existingData && existingData.length > 0) {
+      // Cek apakah ada tiket dengan jenis yang sama persis
+      const exactMatch = existingData.find(d => 
+        (d.jenis_tiket || '').trim().toLowerCase() === form.jenis_tiket.trim().toLowerCase()
+      );
+      if (exactMatch) {
+        setError(`Nomor WhatsApp ini sudah mendaftar untuk tiket ${form.jenis_tiket}. Jika ingin menambah jumlah, silakan update dari dashboard.`);
+        setLoading(false);
+        return;
+      }
+    }
+
     const payload: Partial<RTParticipant> = {
       nama_lengkap:        form.nama_lengkap.trim(),
       email:               form.email.trim(),
-      no_whatsapp:         form.no_whatsapp.trim(),
+      no_whatsapp:         finalWa,
       usia:                parseInt(form.usia || '0', 10),
       jenis_kelamin:       form.jenis_kelamin,
       jenis_tiket:         form.jenis_tiket.trim(),
@@ -103,7 +138,7 @@ const TambahManual: React.FC = () => {
       barcode:        uuidv4(),
     };
 
-    const { error: dbErr } = await supabase.from('rt_participants').insert([payload]);
+    const { error: dbErr } = await supabase.from(import.meta.env.VITE_TABLE_NAME || 'rt_participants').insert([payload]);
     if (dbErr) {
       setError(`Gagal menyimpan: ${dbErr.message}`);
     } else {

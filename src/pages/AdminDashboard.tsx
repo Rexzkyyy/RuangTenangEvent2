@@ -111,7 +111,9 @@ const ParticipantCard: React.FC<{
             {index}
           </span>
           <div className="min-w-0">
-            <p className="font-semibold text-white text-sm truncate">{p.nama_lengkap}</p>
+            <p className="font-semibold text-white text-sm truncate">
+              {p.nama_lengkap} <span className="text-white/40 font-normal ml-1">({p.jenis_tiket})</span>
+            </p>
             <p className="text-xs text-white/40 truncate mt-0.5">{p.email}</p>
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-xs text-white/30">{p.no_whatsapp}</p>
@@ -253,7 +255,8 @@ const AdminDashboard: React.FC = () => {
   /* ── Modal state ────────────────────────────────────────────────── */
   const [importPreview, setImportPreview]       = useState<ImportPreview | null>(null);
   const [importError, setImportError]           = useState('');
-  const [importSummary, setImportSummary]       = useState<{ new: number, updated: number, total: number } | null>(null);
+  const [importSummary, setImportSummary]       = useState<{ new: number, updated: number, total: number, newNames: string[], updatedDetails: { name: string, changes: string[] }[], rejected: number } | null>(null);
+  const [summaryTab, setSummaryTab]             = useState<'baru' | 'diperbarui'>('diperbarui');
   const [detailParticipant, setDetailParticipant] = useState<RTParticipant | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -262,7 +265,7 @@ const AdminDashboard: React.FC = () => {
     setIsSaving(true);
     const { id, created_at, ...updateData } = detailParticipant;
     const { error } = await supabase
-      .from('rt_participants')
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .update({ ...updateData, updated_at: new Date().toISOString() })
       .eq('id', id);
     setIsSaving(false);
@@ -279,7 +282,7 @@ const AdminDashboard: React.FC = () => {
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from('rt_participants')
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .select('*')
       .order('created_at', { ascending: false });
     if (error) console.error('Error fetching:', error);
@@ -296,7 +299,7 @@ const AdminDashboard: React.FC = () => {
   const toggleStatus = useCallback(async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'Pending' ? 'Lunas' : 'Pending';
     const { error } = await supabase
-      .from('rt_participants')
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .update({ status_pembayaran: newStatus, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (!error) fetchParticipants();
@@ -310,7 +313,7 @@ const AdminDashboard: React.FC = () => {
     
     // Update DB
     await supabase
-      .from('rt_participants')
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .update({ status_wa: true, updated_at: new Date().toISOString() })
       .eq('id', p.id);
     fetchParticipants();
@@ -323,7 +326,7 @@ const AdminDashboard: React.FC = () => {
       return;
     }
     const { error } = await supabase
-      .from('rt_participants')
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .delete()
       .eq('id', id);
     if (error) {
@@ -374,6 +377,8 @@ const AdminDashboard: React.FC = () => {
         const ws   = wb.Sheets[wb.SheetNames[0]];
         const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { raw: false });
         if (rawRows.length === 0) { setImportError('File kosong.'); return; }
+        
+        let rejectedWaCount = 0;
         const mapped: Partial<RTParticipant>[] = rawRows.map(row => {
           const findValue = (keywords: string[], exclude: string[] = []) => {
             const key = Object.keys(row).find(k => 
@@ -422,6 +427,12 @@ const AdminDashboard: React.FC = () => {
           const baseNama = valNama?.toString().trim() || 'Tanpa Nama';
 
           const buktiUrl = valBukti?.toString().trim() || '-';
+          
+          if (cleanedWa === '-' || cleanedWa.length < 10 || cleanedWa.length > 15) {
+            rejectedWaCount++;
+            return null; // Abaikan data jika nomor WA tidak valid / terlalu pendek
+          }
+
           const p: Partial<RTParticipant> = {
             id:                  uuidv4(),
             created_at:          valCreated ? new Date(valCreated as string).toISOString() : new Date().toISOString(),
@@ -431,7 +442,7 @@ const AdminDashboard: React.FC = () => {
             no_whatsapp:         cleanedWa,
             usia:                finalUsia,
             jenis_kelamin:       valKelamin?.toString().trim() || '-',
-            jenis_tiket:         valJenisTiket?.toString().trim() || 'VIP Gold 185K',
+            jenis_tiket:         normalizeJenis(valJenisTiket?.toString().trim() || 'Lainnya'),
             sumber_info:         sumberInfo,
             jumlah_tiket:        finalTiket,
             metode_pembayaran:   valMetode?.toString().trim() || '-',
@@ -445,23 +456,26 @@ const AdminDashboard: React.FC = () => {
           };
           
           return p;
-        });
+        }).filter(Boolean) as Partial<RTParticipant>[];
 
         // Filter duplikat di dalam file import itu sendiri
         const deduplicatedMapped = mapped.reduce((acc, current) => {
           const isDuplicate = acc.find(item => 
             item.no_whatsapp === current.no_whatsapp &&
-            item.nama_lengkap?.toLowerCase() === current.nama_lengkap?.toLowerCase() &&
-            item.email?.toLowerCase() === current.email?.toLowerCase() &&
-            normalizeJenisTiket(item.jenis_tiket || '') === normalizeJenisTiket(current.jenis_tiket || '')
+            normalizeJenis(item.jenis_tiket || '') === normalizeJenis(current.jenis_tiket || '') &&
+            item.nama_lengkap?.toLowerCase() === current.nama_lengkap?.toLowerCase()
           );
-          if (!isDuplicate) {
+          if (isDuplicate) {
+            // Timpa data lama dengan data terbaru dari Excel (Jangan ditambah)
+            Object.assign(isDuplicate, current);
+          } else {
             acc.push(current);
           }
           return acc;
         }, [] as Partial<RTParticipant>[]);
 
-        setImportPreview({ rows: deduplicatedMapped, fileName: file.name });
+        // @ts-ignore - menyimpan jumlah ditolak sementara
+        setImportPreview({ rows: deduplicatedMapped, fileName: file.name, rejectedCount: rejectedWaCount });
       } catch {
         setImportError('Gagal membaca file. Pastikan format .xlsx atau .csv valid.');
       }
@@ -476,57 +490,84 @@ const AdminDashboard: React.FC = () => {
     
     let newCount = 0;
     let updatedCount = 0;
+    const newNames: string[] = [];
+    const updatedDetails: { name: string, changes: string[] }[] = [];
 
-    const upsertPayload = importPreview.rows.map(newP => {
-      // Cari data lama yang WA-nya sama dan namanya mirip (bisa jadi sudah ditambahkan nama tiket sebelumnya)
-      const sameWaAndName = participants.filter(extP => 
+    const upsertPayload: Partial<RTParticipant>[] = [];
+
+    importPreview.rows.forEach(newP => {
+      // Cari data lama yang WA, JENIS TIKET, dan NAMA-nya sama persis
+      const exactMatch = participants.find(extP => 
         extP.no_whatsapp === newP.no_whatsapp &&
-        extP.email?.toLowerCase() === newP.email?.toLowerCase() &&
-        (extP.nama_lengkap?.toLowerCase() === newP.nama_lengkap?.toLowerCase() || 
-         extP.nama_lengkap?.toLowerCase().startsWith(newP.nama_lengkap?.toLowerCase() + ' '))
+        normalizeJenis(extP.jenis_tiket || '') === normalizeJenis(newP.jenis_tiket || '') &&
+        extP.nama_lengkap?.toLowerCase() === newP.nama_lengkap?.toLowerCase()
       );
 
-      if (sameWaAndName.length > 0) {
-        // Apakah ada tiket yang sama persis (berdasarkan tipe tiket yang dinormalisasi)?
-        const exactMatch = sameWaAndName.find(extP => 
-          normalizeJenisTiket(extP.jenis_tiket || '') === normalizeJenisTiket(newP.jenis_tiket || '')
-        );
+      if (exactMatch) {
+         // Cek apakah ada perubahan data (abaikan spasi dan huruf besar/kecil)
+         const cleanStr = (s: any) => String(s || '').trim().toLowerCase();
+         
+         // Amankan status Lunas agar tidak turun jadi Pending jika import baru tidak ada buktinya
+         const newStatus = (exactMatch.status_pembayaran === 'Lunas') ? 'Lunas' : newP.status_pembayaran;
 
-        if (exactMatch) {
-           updatedCount++;
-           return {
-             ...newP,
-             id: exactMatch.id,
-             nama_lengkap: exactMatch.nama_lengkap, // pertahankan nama lama yang mungkin sudah ada suffix
-             status_pembayaran: exactMatch.status_pembayaran,
-             jumlah_checkin: exactMatch.jumlah_checkin,
-             status_wa: exactMatch.status_wa,
-             waktu_absen: exactMatch.waktu_absen,
-             created_at: exactMatch.created_at,
-             updated_at: new Date().toISOString()
-           };
-        } else {
-           // WA & Nama sama, TAPI Tiket BEDA -> Jadi baris baru dengan nama ditambah jenis tiket
-           newCount++;
-           const ticketSuffix = normalizeJenisTiket(newP.jenis_tiket || '');
-           return {
-             ...newP,
-             nama_lengkap: `${newP.nama_lengkap} ${ticketSuffix}`
-           };
-        }
+         const changes: string[] = [];
+         if (cleanStr(exactMatch.email) !== cleanStr(newP.email)) changes.push('Email');
+         if (cleanStr(exactMatch.usia) !== cleanStr(newP.usia)) changes.push('Usia');
+         if (cleanStr(exactMatch.jenis_kelamin) !== cleanStr(newP.jenis_kelamin)) changes.push('Kelamin');
+         if (cleanStr(exactMatch.jumlah_tiket) !== cleanStr(newP.jumlah_tiket)) changes.push('Tiket');
+         if (cleanStr(exactMatch.metode_pembayaran) !== cleanStr(newP.metode_pembayaran)) changes.push('Bank');
+         if (cleanStr(exactMatch.tujuan_event) !== cleanStr(newP.tujuan_event)) changes.push('Tujuan');
+         if (cleanStr(exactMatch.bukti_follow_ig_url) !== cleanStr(newP.bukti_follow_ig_url)) changes.push('IG');
+         if (cleanStr(exactMatch.status_pembayaran) !== cleanStr(newStatus)) changes.push('Lunas');
+
+         if (changes.length === 0) {
+            return; // SKIP: data sama persis, jangan masukkan ke update
+         }
+
+         updatedCount++;
+         updatedDetails.push({ name: newP.nama_lengkap || 'Tanpa Nama', changes });
+         
+         // Update data: Timpa dengan data baru dari Excel, TAPI amankan data sensitif
+         upsertPayload.push({
+           ...newP,
+           id: exactMatch.id,
+           created_at: exactMatch.created_at, // Pertahankan waktu daftar pertama kali
+           jumlah_checkin: exactMatch.jumlah_checkin, // Pertahankan riwayat checkin
+           status_wa: exactMatch.status_wa,
+           status_pembayaran: newStatus,
+           waktu_absen: exactMatch.waktu_absen,
+           updated_at: new Date().toISOString()
+         });
+      } else {
+         // Jika tidak ada kesamaan persis (misal nama beda atau tiket beda), buat baris baru
+         newCount++;
+         newNames.push(newP.nama_lengkap || 'Tanpa Nama');
+         upsertPayload.push(newP);
       }
-
-      // Jika tidak ada kesamaan WA & Nama sama sekali
-      newCount++;
-      return newP;
     });
 
-    const { error } = await supabase.from('rt_participants').upsert(upsertPayload);
+    // Jika setelah di-filter ternyata tidak ada yang baru / diupdate sama sekali
+    if (upsertPayload.length === 0) {
+      setImportPreview(null);
+      setImportLoading(false);
+      // Tampilkan popup seolah-olah sukses tapi isinya 0
+      // @ts-ignore
+      const rejected = importPreview.rejectedCount || 0;
+      setSummaryTab('diperbarui');
+      setImportSummary({ new: 0, updated: 0, total: importPreview.rows.length, newNames: [], updatedDetails: [], rejected });
+      return;
+    }
+
+    const { error } = await supabase.from(import.meta.env.VITE_TABLE_NAME || 'rt_participants').upsert(upsertPayload);
     
     if (error) { setImportError(`Gagal import: ${error.message}`); }
     else { 
       setImportPreview(null); 
-      setImportSummary({ new: newCount, updated: updatedCount, total: importPreview.rows.length });
+      // @ts-ignore
+      const rejected = importPreview.rejectedCount || 0;
+      setSummaryTab(updatedCount > 0 ? 'diperbarui' : 'baru');
+      setImportSummary({ new: newCount, updated: updatedCount, total: importPreview.rows.length, newNames, updatedDetails, rejected });
+      
       fetchParticipants(); 
     }
     setImportLoading(false);
@@ -952,7 +993,9 @@ const AdminDashboard: React.FC = () => {
                       </td>
                       {/* Nama Peserta */}
                       <td className="py-4 px-5">
-                        <p className="font-semibold text-white/90">{p.nama_lengkap}</p>
+                        <p className="font-semibold text-white/90">
+                          {p.nama_lengkap} <span className="text-white/40 font-normal ml-1">({p.jenis_tiket})</span>
+                        </p>
                         <p className="text-[11px] text-white/40 mt-1">{p.email}</p>
                       </td>
                       {/* Kontak */}
@@ -1160,7 +1203,7 @@ const AdminDashboard: React.FC = () => {
             </div>
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 mb-4">
               <p className="text-amber-400 text-xs">
-                âš ï¸ Status default: <strong>Pending</strong>. Barcode di-generate otomatis (UUID).
+                <AlertCircle className="w-3.5 h-3.5 inline mr-1 text-orange-400" /> Status default: <strong>Pending</strong>. Barcode di-generate otomatis (UUID).
               </p>
             </div>
             {importError && <p className="text-red-400 text-sm mb-4">{importError}</p>}
@@ -1375,34 +1418,109 @@ const AdminDashboard: React.FC = () => {
           onClick={() => setImportSummary(null)}
         >
           <div
-            className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-white/10 p-6 text-center"
+            className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-white/10 p-6 text-center max-h-[90vh] flex flex-col"
             style={{ background: '#1a1535' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-white font-bold text-xl mb-2">Import Berhasil!</h2>
-            <p className="text-white/60 text-sm mb-6">
-              Total {importSummary.total} data telah diproses.
-            </p>
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                <p className="text-xs text-white/40 mb-1">Data Baru Ditambahkan</p>
-                <p className="text-xl font-bold text-emerald-400">+{importSummary.new}</p>
+            <div className="flex-shrink-0">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
+                <CheckCircle2 className="w-8 h-8" />
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                <p className="text-xs text-white/40 mb-1">Data Lama Diperbarui</p>
-                <p className="text-xl font-bold text-violet-400">{importSummary.updated}</p>
+              <h2 className="text-white font-bold text-xl mb-2">Laporan Import</h2>
+              <p className="text-white/60 text-sm mb-4">
+                Total {importSummary.total} baris Excel diproses.
+              </p>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto min-h-[100px] mb-4 text-left pr-2 custom-scrollbar">
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+                  <p className="text-[11px] text-white/40 mb-1 uppercase tracking-wider">Data Baru</p>
+                  <p className="text-2xl font-bold text-emerald-400">+{importSummary.new}</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+                  <p className="text-[11px] text-white/40 mb-1 uppercase tracking-wider">Diperbarui</p>
+                  <p className="text-2xl font-bold text-violet-400">{importSummary.updated}</p>
+                </div>
+              </div>
+
+              {importSummary.rejected > 0 && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <p className="text-sm text-red-200/80">
+                    <strong className="text-red-400">{importSummary.rejected} baris ditolak</strong> karena WA tidak valid atau kosong.
+                  </p>
+                </div>
+              )}
+
+              {/* TABS HEADER */}
+              {(importSummary.new > 0 || importSummary.updated > 0) && (
+                <div className="flex items-center gap-2 mb-3 border-b border-white/10 pb-2">
+                  <button
+                    onClick={() => setSummaryTab('diperbarui')}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'diperbarui' ? 'bg-violet-500/20 text-violet-300' : 'text-white/40 hover:bg-white/5'}`}
+                  >
+                    Diperbarui ({importSummary.updated})
+                  </button>
+                  <button
+                    onClick={() => setSummaryTab('baru')}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'baru' ? 'bg-emerald-500/20 text-emerald-300' : 'text-white/40 hover:bg-white/5'}`}
+                  >
+                    Data Baru ({importSummary.new})
+                  </button>
+                </div>
+              )}
+
+              {/* TABS CONTENT */}
+              <div className="bg-black/20 rounded-xl p-4 border border-white/5 min-h-[150px]">
+                {summaryTab === 'diperbarui' && (
+                  <>
+                    {importSummary.updatedDetails.length === 0 ? (
+                      <p className="text-sm text-white/40 text-center py-4">Tidak ada data yang diperbarui.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {importSummary.updatedDetails.map((item, i) => (
+                          <li key={i} className="text-sm flex flex-col items-start text-left">
+                            <span className="text-white/80 font-medium">{item.name}</span>
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {item.changes.map((c, j) => (
+                                <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                  {c}
+                                </span>
+                              ))}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+                
+                {summaryTab === 'baru' && (
+                  <>
+                    {importSummary.newNames.length === 0 ? (
+                      <p className="text-sm text-white/40 text-center py-4">Tidak ada data baru.</p>
+                    ) : (
+                      <ul className="text-sm text-white/60 space-y-1.5 list-disc pl-4 text-left">
+                        {importSummary.newNames.map((name, i) => (
+                          <li key={i}>{name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
               </div>
             </div>
-            <button
-              onClick={() => setImportSummary(null)}
-              className="w-full py-3 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
-            >
-              Tutup
-            </button>
+
+            <div className="flex-shrink-0 mt-2">
+              <button
+                onClick={() => setImportSummary(null)}
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+              >
+                Tutup Laporan
+              </button>
+            </div>
           </div>
         </div>
       )}

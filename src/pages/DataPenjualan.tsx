@@ -55,7 +55,7 @@ const DataPenjualan: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     const { data } = await supabase
-      .from('rt_participants')
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .select('*')
       .order('created_at', { ascending: false });
     setParticipants(data || []);
@@ -69,18 +69,19 @@ const DataPenjualan: React.FC = () => {
     const lunas    = participants.filter(p => p.status_pembayaran === 'Lunas');
     const pending  = participants.filter(p => p.status_pembayaran !== 'Lunas');
 
-    const totalTiket = participants.reduce((s, p) => s + (p.jumlah_tiket || 0), 0);
-    const totalLunasTiket = lunas.reduce((s, p) => s + (p.jumlah_tiket || 0), 0);
+    const totalTiket = participants.reduce((s, p) => s + (p.jumlah_tiket || 1), 0);
+    const totalLunasTiket = lunas.reduce((s, p) => s + (p.jumlah_tiket || 1), 0);
+    const totalPendingTiket = pending.reduce((s, p) => s + (p.jumlah_tiket || 1), 0);
 
     const pendapatanLunas = lunas.reduce((s, p) => {
-      return s + getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+      return s + getHarga(p.jenis_tiket) * (p.jumlah_tiket || 1);
     }, 0);
 
     const pendapatanPotensi = pending.reduce((s, p) => {
-      return s + getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+      return s + getHarga(p.jenis_tiket) * (p.jumlah_tiket || 1);
     }, 0);
 
-    const konversiRate = participants.length > 0 ? ((lunas.length / participants.length) * 100).toFixed(1) : '0';
+    const konversiRate = totalTiket > 0 ? ((totalLunasTiket / totalTiket) * 100).toFixed(1) : '0';
 
     /* Per jenis tiket */
     const byJenis: Record<string, { count: number; tiket: number; lunas: number; pendapatan: number }> = {};
@@ -100,8 +101,8 @@ const DataPenjualan: React.FC = () => {
     participants.forEach(p => {
       const m = p.metode_pembayaran || 'Lainnya';
       if (!byMetode[m]) byMetode[m] = { count: 0, lunas: 0 };
-      byMetode[m].count++;
-      if (p.status_pembayaran === 'Lunas') byMetode[m].lunas++;
+      byMetode[m].count += (p.jumlah_tiket || 1);
+      if (p.status_pembayaran === 'Lunas') byMetode[m].lunas += (p.jumlah_tiket || 1);
     });
 
     /* Per Sumber Info */
@@ -145,9 +146,9 @@ const DataPenjualan: React.FC = () => {
           if (!p.created_at) return;
           const t = new Date(p.created_at).getTime();
           if (t >= d.setHours(0, 0, 0, 0) && t < d.setHours(23, 59, 59, 999)) {
-            count++;
+            count += (p.jumlah_tiket || 1);
             if (p.status_pembayaran === 'Lunas') {
-              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 1);
             }
           }
         });
@@ -167,9 +168,9 @@ const DataPenjualan: React.FC = () => {
           if (!p.created_at) return;
           const t = new Date(p.created_at).getTime();
           if (t >= dStart.setHours(0, 0, 0, 0) && t <= dEnd.setHours(23, 59, 59, 999)) {
-            count++;
+            count += (p.jumlah_tiket || 1);
             if (p.status_pembayaran === 'Lunas') {
-              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 1);
             }
           }
         });
@@ -189,9 +190,9 @@ const DataPenjualan: React.FC = () => {
           if (!p.created_at) return;
           const pt = new Date(p.created_at);
           if (pt.getMonth() === d.getMonth() && pt.getFullYear() === d.getFullYear()) {
-            count++;
+            count += (p.jumlah_tiket || 1);
             if (p.status_pembayaran === 'Lunas') {
-              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 0);
+              revenue += getHarga(p.jenis_tiket) * (p.jumlah_tiket || 1);
             }
           }
         });
@@ -203,9 +204,9 @@ const DataPenjualan: React.FC = () => {
     const maxTrend = Math.max(...trendData.map(d => d.count), 1);
 
     return {
-      total: participants.length,
-      lunas: lunas.length,
-      pending: pending.length,
+      total: totalTiket,
+      lunas: totalLunasTiket,
+      pending: totalPendingTiket,
       totalTiket,
       totalLunasTiket,
       pendapatanLunas,
@@ -358,7 +359,7 @@ const DataPenjualan: React.FC = () => {
                               {currency(d.revenue)}
                             </span>
                             <span className="text-white font-bold text-xs bg-[#1a1535] px-2 py-1 rounded-b-md rounded-t-md sm:rounded-t-none border border-white/10 shadow-xl whitespace-nowrap text-center">
-                              {d.count} pendaftar
+                              {d.count} tiket
                             </span>
                           </div>
                           
@@ -505,7 +506,7 @@ const DataPenjualan: React.FC = () => {
                             <div className="flex items-start justify-between mb-2">
                               <div>
                                 <h3 className="text-white font-medium">{metode}</h3>
-                                <p className="text-white/40 text-xs mt-0.5">{d.count} transaksi total</p>
+                                <p className="text-white/40 text-xs mt-0.5">{d.count} tiket dipesan</p>
                               </div>
                               <div className="text-right">
                                 <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-md font-semibold border border-emerald-500/20">

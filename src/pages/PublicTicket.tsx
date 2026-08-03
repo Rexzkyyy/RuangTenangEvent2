@@ -25,7 +25,7 @@ const PublicTicket: React.FC = () => {
       setLoading(true);
       try {
         const { data, error } = await supabase
-          .from('rt_participants')
+          .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
           .select('*')
           .eq('id', id)
           .single();

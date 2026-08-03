@@ -47,14 +47,14 @@ const Scanner: React.FC = () => {
       
       // Try by ID first, then by Barcode (since public ticket could use either)
       let { data, error } = await supabase
-        .from('rt_participants')
+        .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
         .select('*')
         .eq('id', text)
         .single();
         
       if (error || !data) {
         const { data: bData, error: bError } = await supabase
-          .from('rt_participants')
+          .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
           .select('*')
           .eq('barcode', text)
           .single();
@@ -70,7 +70,7 @@ const Scanner: React.FC = () => {
       const whatsapp = data.no_whatsapp || '';
       
       const { data: groupData } = await supabase
-        .from('rt_participants')
+        .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
         .select('*')
         .eq('no_whatsapp', whatsapp);
 
@@ -101,7 +101,7 @@ const Scanner: React.FC = () => {
           const waktuCheckin = new Date().toISOString();
           
           await supabase
-            .from('rt_participants')
+            .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
             .update({ 
               jumlah_checkin: newCheckinCount,
               waktu_absen: waktuCheckin // if schema supports it, harmless if not but helps tracking
