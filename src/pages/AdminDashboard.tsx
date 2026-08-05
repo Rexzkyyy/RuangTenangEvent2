@@ -94,8 +94,9 @@ const ParticipantCard: React.FC<{
   onDetail: () => void;
   onToggle: () => void;
   onWa: () => void;
+  onResetWa: () => void;
   onDelete: () => void;
-}> = ({ p, index, onDetail, onToggle, onWa, onDelete }) => {
+}> = ({ p, index, onDetail, onToggle, onWa, onResetWa, onDelete }) => {
   const isLunas = p.status_pembayaran === 'Lunas';
   const checkinPct = ((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100;
 
@@ -183,13 +184,33 @@ const ParticipantCard: React.FC<{
           <ExternalLink className="w-3.5 h-3.5" />
           <span>E-Tiket</span>
         </a>
-        <button
-          onClick={onWa}
-          className={`flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border ${p.status_wa ? 'text-green-300 bg-green-500/20 border-green-500/30 hover:bg-green-500/30' : 'text-emerald-300 bg-emerald-500/20 border-emerald-500/30 hover:bg-emerald-500/30'}`}
-        >
-          <MessageCircle className={`w-3.5 h-3.5 ${p.status_wa ? 'fill-current' : ''}`} />
-          <span>Kirim WA</span>
-        </button>
+        {p.status_wa ? (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onWa}
+              className="flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border text-green-300 bg-green-500/20 border-green-500/30 hover:bg-green-500/30"
+              title="Kirim ulang WA"
+            >
+              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+              <span>Terkirim</span>
+            </button>
+            <button
+              onClick={onResetWa}
+              className="flex items-center justify-center transition w-[30px] h-[30px] rounded-lg border text-red-300 bg-red-500/20 border-red-500/30 hover:bg-red-500/30"
+              title="Tandai Gagal / Belum Terkirim"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onWa}
+            className="flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border text-emerald-300 bg-emerald-500/20 border-emerald-500/30 hover:bg-emerald-500/30"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>Kirim WA</span>
+          </button>
+        )}
         <button
           onClick={onDelete}
           className="flex items-center gap-1.5 text-xs text-red-300 bg-red-500/20 hover:bg-red-500/30 transition px-2.5 h-[30px] rounded-lg border border-red-500/30 font-medium"
@@ -319,6 +340,22 @@ const AdminDashboard: React.FC = () => {
     fetchParticipants();
 
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`, '_blank');
+  }, [fetchParticipants]);
+
+  const resetWAStatus = useCallback(async (p: RTParticipant) => {
+    if (!window.confirm(`Yakin ingin membatalkan status WA terkirim untuk "${p.nama_lengkap}" (Tandai Gagal/Belum)?`)) return;
+    
+    // Update DB
+    const { error } = await supabase
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+      .update({ status_wa: false, updated_at: new Date().toISOString() })
+      .eq('id', p.id);
+      
+    if (error) {
+      alert(`Gagal mereset status WA: ${error.message}`);
+    } else {
+      fetchParticipants();
+    }
   }, [fetchParticipants]);
 
   const deleteParticipant = useCallback(async (id: string, name: string) => {
@@ -930,6 +967,7 @@ const AdminDashboard: React.FC = () => {
                 onDetail={() => setDetailParticipant(p)}
                 onToggle={() => toggleStatus(p.id!, p.status_pembayaran!)}
                 onWa={() => sendWhatsApp(p)}
+                onResetWa={() => resetWAStatus(p)}
                 onDelete={() => deleteParticipant(p.id!, p.nama_lengkap)}
               />
             ))
@@ -1088,10 +1126,18 @@ const AdminDashboard: React.FC = () => {
                               </a>
                               <button
                                 onClick={() => { sendWhatsApp(p); setOpenActionId(null); }}
-                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-emerald-400 hover:bg-white/5 transition flex items-center gap-2"
+                                className={`w-full text-left px-4 py-2.5 text-[11px] font-medium transition flex items-center gap-2 ${p.status_wa ? 'text-green-400 hover:bg-white/5' : 'text-emerald-400 hover:bg-white/5'}`}
                               >
-                                <MessageCircle className="w-3.5 h-3.5" /> Kirim WA
+                                <MessageCircle className="w-3.5 h-3.5" /> {p.status_wa ? 'Kirim Ulang WA' : 'Kirim WA'}
                               </button>
+                              {p.status_wa && (
+                                <button
+                                  onClick={() => { resetWAStatus(p); setOpenActionId(null); }}
+                                  className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-red-400 hover:bg-white/5 transition flex items-center gap-2"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Tandai WA Gagal/Belum
+                                </button>
+                              )}
                               <button
                                 onClick={() => { deleteParticipant(p.id!, p.nama_lengkap); setOpenActionId(null); }}
                                 className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-red-400 hover:bg-white/5 transition flex items-center gap-2 border-t border-white/5"
