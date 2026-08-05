@@ -88,17 +88,28 @@ function normalizeJenis(jenis: string): string {
   return jenis;
 }
 
+function validatePhoneNumber(phone: string): { isValid: boolean; message: string; color: string } {
+  if (!phone) return { isValid: false, message: 'Kosong', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
+  const clean = phone.replace(/[-+ ]/g, '');
+  if (!/^\d+$/.test(clean)) return { isValid: false, message: 'Ada huruf/simbol', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
+  if (!clean.startsWith('08') && !clean.startsWith('628')) return { isValid: false, message: 'Awalan salah', color: 'text-orange-400 bg-orange-500/15 border-orange-500/30' };
+  if (clean.length < 10) return { isValid: false, message: 'Terlalu pendek', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
+  if (clean.length > 15) return { isValid: false, message: 'Terlalu panjang', color: 'text-orange-400 bg-orange-500/15 border-orange-500/30' };
+  return { isValid: true, message: 'Valid', color: 'text-green-400 bg-green-500/15 border-green-500/30' };
+}
+
 const ParticipantCard: React.FC<{
   p: RTParticipant;
   index: number;
   onDetail: () => void;
   onToggle: () => void;
   onWa: () => void;
-  onResetWa: () => void;
+  onToggleWa: () => void;
   onDelete: () => void;
-}> = ({ p, index, onDetail, onToggle, onWa, onResetWa, onDelete }) => {
+}> = ({ p, index, onDetail, onToggle, onWa, onToggleWa, onDelete }) => {
   const isLunas = p.status_pembayaran === 'Lunas';
   const checkinPct = ((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100;
+  const waValidation = validatePhoneNumber(p.no_whatsapp || '');
 
   return (
     <div
@@ -116,15 +127,14 @@ const ParticipantCard: React.FC<{
               {p.nama_lengkap} <span className="text-white/40 font-normal ml-1">({p.jenis_tiket})</span>
             </p>
             <p className="text-xs text-white/40 truncate mt-0.5">{p.email}</p>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex flex-col gap-1 mt-1">
               <p className="text-xs text-white/30">{p.no_whatsapp}</p>
-            {p.status_wa && (
-              <span className="text-[10px] bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20 flex items-center gap-1 font-medium">
-                <CheckCircle2 className="w-2.5 h-2.5" /> WA
+              <span className={`w-fit text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1 font-medium ${waValidation.color}`}>
+                {!waValidation.isValid && <AlertCircle className="w-2.5 h-2.5" />}
+                {waValidation.message}
               </span>
-            )}
+            </div>
           </div>
-        </div>
         </div>
         <span
           className={`flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
@@ -184,33 +194,21 @@ const ParticipantCard: React.FC<{
           <ExternalLink className="w-3.5 h-3.5" />
           <span>E-Tiket</span>
         </a>
-        {p.status_wa ? (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onWa}
-              className="flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border text-green-300 bg-green-500/20 border-green-500/30 hover:bg-green-500/30"
-              title="Kirim ulang WA"
-            >
-              <MessageCircle className="w-3.5 h-3.5 fill-current" />
-              <span>Terkirim</span>
-            </button>
-            <button
-              onClick={onResetWa}
-              className="flex items-center justify-center transition w-[30px] h-[30px] rounded-lg border text-red-300 bg-red-500/20 border-red-500/30 hover:bg-red-500/30"
-              title="Tandai Gagal / Belum Terkirim"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={onWa}
-            className="flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border text-emerald-300 bg-emerald-500/20 border-emerald-500/30 hover:bg-emerald-500/30"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>Kirim WA</span>
-          </button>
-        )}
+        <button
+          onClick={onToggleWa}
+          className={`flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border ${p.status_wa ? 'text-green-300 bg-green-500/20 border-green-500/30 hover:bg-green-500/30' : 'text-orange-300 bg-orange-500/20 border-orange-500/30 hover:bg-orange-500/30'}`}
+        >
+          {p.status_wa ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+          <span>{p.status_wa ? 'WA Terkirim' : 'Belum WA'}</span>
+        </button>
+        <button
+          onClick={onWa}
+          className="flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border text-emerald-300 bg-emerald-500/20 border-emerald-500/30 hover:bg-emerald-500/30"
+          title="Kirim Pesan WA"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          <span>Kirim</span>
+        </button>
         <button
           onClick={onDelete}
           className="flex items-center gap-1.5 text-xs text-red-300 bg-red-500/20 hover:bg-red-500/30 transition px-2.5 h-[30px] rounded-lg border border-red-500/30 font-medium"
@@ -331,28 +329,20 @@ const AdminDashboard: React.FC = () => {
     const ticketCode = formatTicketCode(p.barcode || p.id || '');
     const message = `Halo Kak *${p.nama_lengkap}*!\n\nTerimakasih banyak telah mendaftar di acara Kajian Parenting & Healing Class Bersama Dr. Aisa Dahlan. Kami sangat antusias menyambut kehadiran kakak!\n\nBerikut adalah rincian E-Tiket Kakak:\n\n*Nomor Tiket:* ${ticketCode}\n*Kategori Tiket:* ${p.jenis_tiket}\n*Jumlah Tiket:* ${p.jumlah_tiket} Orang\n*Waktu:* Kamis, 3 Sept 2026 (08.00 - 12.00 WITA)\n*Lokasi:* Hotel Zahra Syariah, Kendari\n\n*Link E-Tiket:* \n${ticketUrl}\n\nMohon siapkan dan tunjukkan barcode yang ada di link tersebut kepada panitia saat registrasi ulang ya.\n\nSampai jumpa di acara nanti! Semoga harinya menyenangkan.`;
     const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
-    
-    // Update DB
-    await supabase
-      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-      .update({ status_wa: true, updated_at: new Date().toISOString() })
-      .eq('id', p.id);
-    fetchParticipants();
-
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`, '_blank');
-  }, [fetchParticipants]);
+  }, []);
 
-  const resetWAStatus = useCallback(async (p: RTParticipant) => {
-    if (!window.confirm(`Yakin ingin membatalkan status WA terkirim untuk "${p.nama_lengkap}" (Tandai Gagal/Belum)?`)) return;
+  const toggleWAStatus = useCallback(async (p: RTParticipant) => {
+    const newStatus = !p.status_wa;
     
     // Update DB
     const { error } = await supabase
       .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-      .update({ status_wa: false, updated_at: new Date().toISOString() })
+      .update({ status_wa: newStatus, updated_at: new Date().toISOString() })
       .eq('id', p.id);
       
     if (error) {
-      alert(`Gagal mereset status WA: ${error.message}`);
+      alert(`Gagal merubah status WA: ${error.message}`);
     } else {
       fetchParticipants();
     }
@@ -967,7 +957,7 @@ const AdminDashboard: React.FC = () => {
                 onDetail={() => setDetailParticipant(p)}
                 onToggle={() => toggleStatus(p.id!, p.status_pembayaran!)}
                 onWa={() => sendWhatsApp(p)}
-                onResetWa={() => resetWAStatus(p)}
+                onToggleWa={() => toggleWAStatus(p)}
                 onDelete={() => deleteParticipant(p.id!, p.nama_lengkap)}
               />
             ))
@@ -1036,7 +1026,16 @@ const AdminDashboard: React.FC = () => {
                       </td>
                       {/* Kontak */}
                       <td className="py-4 px-5">
-                        <p className="text-xs text-white/70 font-medium">{p.no_whatsapp}</p>
+                        <p className="text-xs text-white/70 font-medium mb-1.5">{p.no_whatsapp}</p>
+                        {(() => {
+                          const valid = validatePhoneNumber(p.no_whatsapp || '');
+                          return (
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${valid.color}`}>
+                              {!valid.isValid && <AlertCircle className="w-2.5 h-2.5" />}
+                              {valid.message}
+                            </span>
+                          );
+                        })()}
                       </td>
                       {/* Tiket */}
                       <td className="py-4 px-5">
@@ -1085,15 +1084,21 @@ const AdminDashboard: React.FC = () => {
                       )}
                       {/* Status WA */}
                       <td className="py-4 px-5">
-                        {p.status_wa ? (
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-green-500/15 text-green-400 border border-green-500/20">
-                            <CheckCircle2 className="w-3 h-3" /> Terkirim
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/20">
-                            <AlertCircle className="w-3 h-3" /> Belum
-                          </span>
-                        )}
+                        <button
+                          onClick={() => toggleWAStatus(p)}
+                          title="Klik untuk mengubah status WA"
+                          className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border transition hover:brightness-110 cursor-pointer ${
+                            p.status_wa 
+                              ? 'bg-green-500/15 text-green-400 border-green-500/30' 
+                              : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+                          }`}
+                        >
+                          {p.status_wa ? (
+                            <><CheckCircle2 className="w-3.5 h-3.5" /> Terkirim</>
+                          ) : (
+                            <><AlertCircle className="w-3.5 h-3.5" /> Belum</>
+                          )}
+                        </button>
                       </td>
                       {/* Aksi */}
                       <td className="py-4 px-5 text-right relative">
@@ -1126,18 +1131,10 @@ const AdminDashboard: React.FC = () => {
                               </a>
                               <button
                                 onClick={() => { sendWhatsApp(p); setOpenActionId(null); }}
-                                className={`w-full text-left px-4 py-2.5 text-[11px] font-medium transition flex items-center gap-2 ${p.status_wa ? 'text-green-400 hover:bg-white/5' : 'text-emerald-400 hover:bg-white/5'}`}
+                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-emerald-400 hover:bg-white/5 transition flex items-center gap-2"
                               >
-                                <MessageCircle className="w-3.5 h-3.5" /> {p.status_wa ? 'Kirim Ulang WA' : 'Kirim WA'}
+                                <MessageCircle className="w-3.5 h-3.5" /> Kirim Pesan WA
                               </button>
-                              {p.status_wa && (
-                                <button
-                                  onClick={() => { resetWAStatus(p); setOpenActionId(null); }}
-                                  className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-red-400 hover:bg-white/5 transition flex items-center gap-2"
-                                >
-                                  <X className="w-3.5 h-3.5" /> Tandai WA Gagal/Belum
-                                </button>
-                              )}
                               <button
                                 onClick={() => { deleteParticipant(p.id!, p.nama_lengkap); setOpenActionId(null); }}
                                 className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-red-400 hover:bg-white/5 transition flex items-center gap-2 border-t border-white/5"
