@@ -106,7 +106,8 @@ const ParticipantCard: React.FC<{
   onWa: () => void;
   onToggleWa: () => void;
   onDelete: () => void;
-}> = ({ p, index, onDetail, onToggle, onWa, onToggleWa, onDelete }) => {
+  showCheckin?: boolean;
+}> = ({ p, index, onDetail, onToggle, onWa, onToggleWa, onDelete, showCheckin }) => {
   const isLunas = p.status_pembayaran === 'Lunas';
   const checkinPct = ((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100;
   const waValidation = validatePhoneNumber(p.no_whatsapp || '');
@@ -163,18 +164,20 @@ const ParticipantCard: React.FC<{
       </div>
 
       {/* Check-in bar */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-white/40 w-16 flex-shrink-0">Check-in</span>
-        <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full bg-cyan-400 transition-all"
-            style={{ width: `${checkinPct}%` }}
-          />
+      {showCheckin && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-white/40 w-16 flex-shrink-0">Check-in</span>
+          <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-cyan-400 transition-all"
+              style={{ width: `${checkinPct}%` }}
+            />
+          </div>
+          <span className="text-xs text-white/50 flex-shrink-0">
+            {p.jumlah_checkin ?? 0}/{p.jumlah_tiket}
+          </span>
         </div>
-        <span className="text-xs text-white/50 flex-shrink-0">
-          {p.jumlah_checkin ?? 0}/{p.jumlah_tiket}
-        </span>
-      </div>
+      )}
 
       {/* Actions row */}
       <div className="flex items-center flex-wrap gap-2 pt-2 border-t border-white/5">
@@ -959,6 +962,7 @@ const AdminDashboard: React.FC = () => {
                 onWa={() => sendWhatsApp(p)}
                 onToggleWa={() => toggleWAStatus(p)}
                 onDelete={() => deleteParticipant(p.id!, p.nama_lengkap)}
+                showCheckin={activeTab === 'Sudah Hadir'}
               />
             ))
           )}
@@ -985,7 +989,9 @@ const AdminDashboard: React.FC = () => {
                   </th>
                   <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Tiket</th>
                   <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Pembayaran</th>
-                  <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Check-in</th>
+                  {activeTab === 'Sudah Hadir' && (
+                    <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Check-in</th>
+                  )}
                   {activeTab === 'Sudah Hadir' && (
                     <th className="py-4 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Waktu Absen</th>
                   )}
@@ -996,16 +1002,18 @@ const AdminDashboard: React.FC = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={activeTab === 'Sudah Hadir' ? 8 : 7} className="text-center py-16">
+                    <td colSpan={activeTab === 'Sudah Hadir' ? 9 : 7} className="text-center py-16">
                       <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto" />
                       <p className="mt-3 text-white/30 text-sm">Memuat data...</p>
                     </td>
                   </tr>
                 ) : paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={activeTab === 'Sudah Hadir' ? 8 : 7} className="text-center py-16">
-                      <div className="text-4xl mb-3">🔍 </div>
-                      <p className="text-white/30 text-sm">Tidak ada data yang cocok.</p>
+                    <td colSpan={activeTab === 'Sudah Hadir' ? 9 : 7}>
+                      <div className="text-center py-16">
+                        <div className="text-4xl mb-3">🔍 </div>
+                        <p className="text-white/30 text-sm">Tidak ada data yang cocok.</p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -1062,20 +1070,22 @@ const AdminDashboard: React.FC = () => {
                       </td>
 
                       {/* Check-in */}
-                      <td className="py-4 px-5">
-                        <div className="flex flex-col gap-1.5 w-24">
-                          <div className="flex justify-between items-center text-[10px] text-white/50">
-                            <span>0/{p.jumlah_tiket}</span>
-                            <span>{p.jumlah_checkin ?? 0}/{p.jumlah_tiket}</span>
+                      {activeTab === 'Sudah Hadir' && (
+                        <td className="py-4 px-5">
+                          <div className="flex flex-col gap-1.5 w-24">
+                            <div className="flex justify-between items-center text-[10px] text-white/50">
+                              <span>0/{p.jumlah_tiket}</span>
+                              <span>{p.jumlah_checkin ?? 0}/{p.jumlah_tiket}</span>
+                            </div>
+                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-cyan-500 transition-all"
+                                style={{ width: `${((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-cyan-500 transition-all"
-                              style={{ width: `${((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
+                        </td>
+                      )}
                       {/* Waktu Absen (Dynamic) */}
                       {activeTab === 'Sudah Hadir' && (
                         <td className="py-3.5 px-4 text-xs text-white/50">
