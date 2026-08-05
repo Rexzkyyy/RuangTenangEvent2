@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import * as XLSX from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
-import { formatTicketCode, normalizeJenisTiket, currency, getHarga } from '../utils';
+import { formatTicketCode, currency, getHarga } from '../utils';
 
 import {
   Download, Search, CheckCircle2, RefreshCw, Loader2,
