@@ -647,7 +647,7 @@ const AdminDashboard: React.FC = () => {
     const isDuplicate = (p: RTParticipant) => {
       const name = p.nama_lengkap?.trim().toLowerCase() || '';
       const wa = String(p.no_whatsapp || '').replace(/\D/g, '');
-      return (name && nameCounts.get(name)! > 1) || (wa && waCounts.get(wa)! > 1);
+      return Boolean((name && nameCounts.get(name)! > 1) || (wa && waCounts.get(wa)! > 1));
     };
 
     return {
@@ -676,7 +676,7 @@ const AdminDashboard: React.FC = () => {
     const isDuplicate = (p: RTParticipant) => {
       const name = p.nama_lengkap?.trim().toLowerCase() || '';
       const wa = String(p.no_whatsapp || '').replace(/\D/g, '');
-      return (name && nameCounts.get(name)! > 1) || (wa && waCounts.get(wa)! > 1);
+      return Boolean((name && nameCounts.get(name)! > 1) || (wa && waCounts.get(wa)! > 1));
     };
 
     const withTs = participants.map(p => ({
