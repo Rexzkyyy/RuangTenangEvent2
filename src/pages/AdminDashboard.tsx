@@ -255,7 +255,7 @@ const AdminDashboard: React.FC = () => {
   /* ── Filter & Sort state ────────────────────────────────────────── */
   const [searchInput, setSearchInput]   = useState('');
   const searchTerm = useDebounce(searchInput, 300);
-  const [activeTab, setActiveTab]       = useState<'Semua' | 'Terverifikasi' | 'Belum Lunas' | 'Sudah Hadir' | 'Belum Kirim WA' | 'Sudah Kirim WA'>('Semua');
+  const [activeTab, setActiveTab]       = useState<'Semua' | 'Terverifikasi' | 'Belum Lunas' | 'Sudah Hadir' | 'Belum Kirim WA' | 'Sudah Kirim WA' | 'Duplikat'>('Semua');
   const [filterTiket, setFilterTiket]   = useState('');
   const [sortField, setSortField]       = useState<SortField>('created_at');
   const [sortDir, setSortDir]           = useState<SortDir>('desc');
@@ -634,6 +634,22 @@ const AdminDashboard: React.FC = () => {
 
   /* ── Memoized tab counts & filter + sort ─────────────────────────── */
   const tabCounts = useMemo(() => {
+    const nameCounts = new Map<string, number>();
+    const waCounts = new Map<string, number>();
+    
+    participants.forEach(p => {
+      const name = p.nama_lengkap?.trim().toLowerCase() || '';
+      const wa = String(p.no_whatsapp || '').replace(/\D/g, '');
+      if (name) nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+      if (wa) waCounts.set(wa, (waCounts.get(wa) || 0) + 1);
+    });
+
+    const isDuplicate = (p: RTParticipant) => {
+      const name = p.nama_lengkap?.trim().toLowerCase() || '';
+      const wa = String(p.no_whatsapp || '').replace(/\D/g, '');
+      return (name && nameCounts.get(name)! > 1) || (wa && waCounts.get(wa)! > 1);
+    };
+
     return {
       'Semua': participants.length,
       'Terverifikasi': participants.filter(p => p.status_pembayaran === 'Lunas').length,
@@ -641,11 +657,27 @@ const AdminDashboard: React.FC = () => {
       'Sudah Hadir': participants.filter(p => (p.jumlah_checkin || 0) > 0).length,
       'Belum Kirim WA': participants.filter(p => !p.status_wa).length,
       'Sudah Kirim WA': participants.filter(p => p.status_wa).length,
+      'Duplikat': participants.filter(p => isDuplicate(p)).length,
     };
   }, [participants]);
 
   const filteredSorted = useMemo(() => {
     const term = searchTerm.toLowerCase();
+
+    const nameCounts = new Map<string, number>();
+    const waCounts = new Map<string, number>();
+    participants.forEach(p => {
+      const name = p.nama_lengkap?.trim().toLowerCase() || '';
+      const wa = String(p.no_whatsapp || '').replace(/\D/g, '');
+      if (name) nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+      if (wa) waCounts.set(wa, (waCounts.get(wa) || 0) + 1);
+    });
+
+    const isDuplicate = (p: RTParticipant) => {
+      const name = p.nama_lengkap?.trim().toLowerCase() || '';
+      const wa = String(p.no_whatsapp || '').replace(/\D/g, '');
+      return (name && nameCounts.get(name)! > 1) || (wa && waCounts.get(wa)! > 1);
+    };
 
     const withTs = participants.map(p => ({
       p,
@@ -666,6 +698,7 @@ const AdminDashboard: React.FC = () => {
         if (activeTab === 'Sudah Hadir') matchTab = (p.jumlah_checkin || 0) > 0;
         if (activeTab === 'Belum Kirim WA') matchTab = !p.status_wa;
         if (activeTab === 'Sudah Kirim WA') matchTab = !!p.status_wa;
+        if (activeTab === 'Duplikat') matchTab = isDuplicate(p);
 
         const matchTiket  = !filterTiket || normalizeJenis(p.jenis_tiket || '') === filterTiket;
         return matchSearch && matchTab && matchTiket;
@@ -906,7 +939,7 @@ const AdminDashboard: React.FC = () => {
             <span className="text-xs font-semibold text-white/30 uppercase tracking-wider mr-2 flex items-center gap-1.5 flex-shrink-0">
               <Filter className="w-3.5 h-3.5" /> FILTER:
             </span>
-            {(['Semua', 'Terverifikasi', 'Belum Lunas', 'Sudah Hadir', 'Belum Kirim WA', 'Sudah Kirim WA'] as const).map(tab => {
+            {(['Semua', 'Terverifikasi', 'Belum Lunas', 'Sudah Hadir', 'Belum Kirim WA', 'Sudah Kirim WA', 'Duplikat'] as const).map(tab => {
               const isActive = activeTab === tab;
               const count = tabCounts[tab];
               
