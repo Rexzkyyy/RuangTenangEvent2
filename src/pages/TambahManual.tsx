@@ -135,7 +135,6 @@ const TambahManual: React.FC = () => {
       pernyataan_benar:    form.pernyataan_benar,
       sumber_info:         [...sumberOptions, ...(sumberOther.trim() ? [sumberOther.trim()] : [])],
       jumlah_checkin: 0,
-      barcode:        uuidv4(),
     };
 
     const { error: dbErr } = await supabase.from(import.meta.env.VITE_TABLE_NAME || 'rt_participants').insert([payload]);

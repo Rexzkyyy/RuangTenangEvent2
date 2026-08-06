@@ -285,7 +285,7 @@ const AdminDashboard: React.FC = () => {
   const handleUpdateParticipant = async () => {
     if (!detailParticipant?.id) return;
     setIsSaving(true);
-    const { id, created_at, ...updateData } = detailParticipant;
+    const { id, created_at, barcode, ...updateData } = detailParticipant;
     const { error } = await supabase
       .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .update({ ...updateData, updated_at: new Date().toISOString() })
@@ -491,7 +491,7 @@ const AdminDashboard: React.FC = () => {
         // Filter duplikat di dalam file import itu sendiri
         const deduplicatedMapped = mapped.reduce((acc, current) => {
           const isDuplicate = acc.find(item => 
-            String(item.no_whatsapp || '').replace(/\\D/g, '') === String(current.no_whatsapp || '').replace(/\\D/g, '') &&
+            String(item.no_whatsapp || '').replace(/\D/g, '') === String(current.no_whatsapp || '').replace(/\D/g, '') &&
             normalizeJenis(item.jenis_tiket || '') === normalizeJenis(current.jenis_tiket || '')
           );
           if (isDuplicate) {
@@ -519,17 +519,21 @@ const AdminDashboard: React.FC = () => {
     
     let newCount = 0;
     let updatedCount = 0;
+    let extraRejected = 0;
     const newNames: string[] = [];
     const updatedDetails: { name: string, changes: string[] }[] = [];
 
     const upsertPayload: Partial<RTParticipant>[] = [];
 
     importPreview.rows.forEach(newP => {
-      // Cari data lama yang WA (abaikan karakter non-angka seperti +) dan JENIS TIKET-nya sama
+      // Cari data lama yang WA (abaikan karakter non-angka seperti +)
       const exactMatch = participants.find(extP => 
-        String(extP.no_whatsapp || '').replace(/\\D/g, '') === String(newP.no_whatsapp || '').replace(/\\D/g, '') &&
-        normalizeJenis(extP.jenis_tiket || '') === normalizeJenis(newP.jenis_tiket || '')
+        String(extP.no_whatsapp || '').replace(/\D/g, '') === String(newP.no_whatsapp || '').replace(/\D/g, '')
       );
+
+      const validTypes = ['Silver', 'Gold', 'Reguler'];
+      const newJenisTiket = normalizeJenis(newP.jenis_tiket || '');
+      const isValidType = validTypes.includes(newJenisTiket);
 
       if (exactMatch) {
          // Cek apakah ada perubahan data (abaikan spasi dan huruf besar/kecil)
@@ -537,6 +541,8 @@ const AdminDashboard: React.FC = () => {
          
          // Amankan status Lunas agar tidak turun jadi Pending jika import baru tidak ada buktinya
          const newStatus = (exactMatch.status_pembayaran === 'Lunas') ? 'Lunas' : newP.status_pembayaran;
+
+         let finalJenisTiket = exactMatch.jenis_tiket;
 
          const changes: string[] = [];
          if (cleanStr(exactMatch.email) !== cleanStr(newP.email)) changes.push('Email');
@@ -547,6 +553,12 @@ const AdminDashboard: React.FC = () => {
          if (cleanStr(exactMatch.tujuan_event) !== cleanStr(newP.tujuan_event)) changes.push('Tujuan');
          if (cleanStr(exactMatch.bukti_follow_ig_url) !== cleanStr(newP.bukti_follow_ig_url)) changes.push('IG');
          if (cleanStr(exactMatch.status_pembayaran) !== cleanStr(newStatus)) changes.push('Lunas');
+         
+         // Update jenis tiket HANYA jika valid & berbeda (Jika 'Lainnya' maka diabaikan)
+         if (isValidType && cleanStr(exactMatch.jenis_tiket) !== cleanStr(newJenisTiket)) {
+             changes.push('Jenis Tiket');
+             finalJenisTiket = newJenisTiket;
+         }
 
          if (changes.length === 0) {
             return; // SKIP: data sama persis, jangan masukkan ke update
@@ -559,6 +571,7 @@ const AdminDashboard: React.FC = () => {
          upsertPayload.push({
            ...newP,
            id: exactMatch.id,
+           jenis_tiket: finalJenisTiket,
            created_at: exactMatch.created_at, // Pertahankan waktu daftar pertama kali
            jumlah_checkin: exactMatch.jumlah_checkin, // Pertahankan riwayat checkin
            status_wa: exactMatch.status_wa,
@@ -567,10 +580,15 @@ const AdminDashboard: React.FC = () => {
            updated_at: new Date().toISOString()
          });
       } else {
-         // Jika tidak ada kesamaan persis (misal nama beda atau tiket beda), buat baris baru
-         newCount++;
-         newNames.push(newP.nama_lengkap || 'Tanpa Nama');
-         upsertPayload.push(newP);
+         if (!isValidType) {
+           // Jangan masukan tiket selain 3 jenis itu (misal karena nama kolom lupa dan jadi Lainnya)
+           extraRejected++;
+         } else {
+           // Jika tidak ada kesamaan persis, buat baris baru
+           newCount++;
+           newNames.push(newP.nama_lengkap || 'Tanpa Nama');
+           upsertPayload.push(newP);
+         }
       }
     });
 
@@ -580,7 +598,7 @@ const AdminDashboard: React.FC = () => {
       setImportLoading(false);
       // Tampilkan popup seolah-olah sukses tapi isinya 0
       // @ts-ignore
-      const rejected = importPreview.rejectedCount || 0;
+      const rejected = (importPreview.rejectedCount || 0) + extraRejected;
       setSummaryTab('diperbarui');
       setImportSummary({ new: 0, updated: 0, total: importPreview.rows.length, newNames: [], updatedDetails: [], rejected });
       return;
@@ -592,7 +610,7 @@ const AdminDashboard: React.FC = () => {
     else { 
       setImportPreview(null); 
       // @ts-ignore
-      const rejected = importPreview.rejectedCount || 0;
+      const rejected = (importPreview.rejectedCount || 0) + extraRejected;
       setSummaryTab(updatedCount > 0 ? 'diperbarui' : 'baru');
       setImportSummary({ new: newCount, updated: updatedCount, total: importPreview.rows.length, newNames, updatedDetails, rejected });
       
