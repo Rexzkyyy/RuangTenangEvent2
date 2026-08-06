@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
-import { v4 as uuidv4 } from 'uuid';
 import {
   UserPlus, Save, Loader2, CheckCircle2, ArrowLeft,
 } from 'lucide-react';
