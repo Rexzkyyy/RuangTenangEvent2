@@ -21,6 +21,7 @@ type SortDir   = 'asc' | 'desc';
 interface ImportPreview {
   rows: Partial<RTParticipant>[];
   fileName: string;
+  rejectedDetails?: { name: string; reason: string }[];
 }
 
 /* â”€â”€â”€ Debounce hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -277,8 +278,17 @@ const AdminDashboard: React.FC = () => {
   /* ── Modal state ────────────────────────────────────────────────── */
   const [importPreview, setImportPreview]       = useState<ImportPreview | null>(null);
   const [importError, setImportError]           = useState('');
-  const [importSummary, setImportSummary]       = useState<{ new: number, updated: number, total: number, newNames: string[], updatedDetails: { name: string, changes: string[] }[], rejected: number } | null>(null);
-  const [summaryTab, setSummaryTab]             = useState<'baru' | 'diperbarui'>('diperbarui');
+  const [importSummary, setImportSummary]       = useState<{ 
+    new: number, 
+    updated: number, 
+    total: number, 
+    newNames: string[], 
+    updatedDetails: { name: string, changes: string[] }[], 
+    rejected: number,
+    rejectedDetails?: { name: string, reason: string }[],
+    skippedDetails?: { name: string, reason: string }[] 
+  } | null>(null);
+  const [summaryTab, setSummaryTab]             = useState<'baru' | 'diperbarui' | 'dilewati' | 'ditolak'>('diperbarui');
   const [detailParticipant, setDetailParticipant] = useState<RTParticipant | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -408,7 +418,7 @@ const AdminDashboard: React.FC = () => {
         const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { raw: false });
         if (rawRows.length === 0) { setImportError('File kosong.'); return; }
         
-        let rejectedWaCount = 0;
+        const rejectedDetails: { name: string, reason: string }[] = [];
         const mapped: Partial<RTParticipant>[] = rawRows.map(row => {
           const findValue = (keywords: string[], exclude: string[] = []) => {
             const key = Object.keys(row).find(k => 
@@ -459,7 +469,7 @@ const AdminDashboard: React.FC = () => {
           const buktiUrl = valBukti?.toString().trim() || '-';
           
           if (cleanedWa === '-' || cleanedWa.length < 10 || cleanedWa.length > 15 || !cleanedWa.startsWith('628')) {
-            rejectedWaCount++;
+            rejectedDetails.push({ name: baseNama, reason: `WA Tidak Valid (${cleanedWa})` });
             return null; // Abaikan data jika nomor WA tidak valid / bukan nomor HP Indonesia
           }
 
@@ -503,8 +513,7 @@ const AdminDashboard: React.FC = () => {
           return acc;
         }, [] as Partial<RTParticipant>[]);
 
-        // @ts-ignore - menyimpan jumlah ditolak sementara
-        setImportPreview({ rows: deduplicatedMapped, fileName: file.name, rejectedCount: rejectedWaCount });
+        setImportPreview({ rows: deduplicatedMapped, fileName: file.name, rejectedDetails });
       } catch {
         setImportError('Gagal membaca file. Pastikan format .xlsx atau .csv valid.');
       }
@@ -519,9 +528,10 @@ const AdminDashboard: React.FC = () => {
     
     let newCount = 0;
     let updatedCount = 0;
-    let extraRejected = 0;
     const newNames: string[] = [];
     const updatedDetails: { name: string, changes: string[] }[] = [];
+    const skippedDetails: { name: string, reason: string }[] = [];
+    const rejectedDetails = [...(importPreview.rejectedDetails || [])];
 
     const upsertPayload: Partial<RTParticipant>[] = [];
 
@@ -561,6 +571,7 @@ const AdminDashboard: React.FC = () => {
          }
 
          if (changes.length === 0) {
+            skippedDetails.push({ name: newP.nama_lengkap || 'Tanpa Nama', reason: 'Data duplikat sama persis' });
             return; // SKIP: data sama persis, jangan masukkan ke update
          }
 
@@ -581,8 +592,7 @@ const AdminDashboard: React.FC = () => {
          });
       } else {
          if (!isValidType) {
-           // Jangan masukan tiket selain 3 jenis itu (misal karena nama kolom lupa dan jadi Lainnya)
-           extraRejected++;
+           rejectedDetails.push({ name: newP.nama_lengkap || 'Tanpa Nama', reason: `Jenis Tiket Tidak Valid (${newJenisTiket})` });
          } else {
            // Jika tidak ada kesamaan persis, buat baris baru
            newCount++;
@@ -596,11 +606,12 @@ const AdminDashboard: React.FC = () => {
     if (upsertPayload.length === 0) {
       setImportPreview(null);
       setImportLoading(false);
-      // Tampilkan popup seolah-olah sukses tapi isinya 0
-      // @ts-ignore
-      const rejected = (importPreview.rejectedCount || 0) + extraRejected;
-      setSummaryTab('diperbarui');
-      setImportSummary({ new: 0, updated: 0, total: importPreview.rows.length, newNames: [], updatedDetails: [], rejected });
+      setSummaryTab('dilewati');
+      setImportSummary({ 
+        new: 0, updated: 0, total: importPreview.rows.length, 
+        newNames: [], updatedDetails: [], rejected: rejectedDetails.length, 
+        rejectedDetails, skippedDetails 
+      });
       return;
     }
 
@@ -609,10 +620,17 @@ const AdminDashboard: React.FC = () => {
     if (error) { setImportError(`Gagal import: ${error.message}`); }
     else { 
       setImportPreview(null); 
-      // @ts-ignore
-      const rejected = (importPreview.rejectedCount || 0) + extraRejected;
-      setSummaryTab(updatedCount > 0 ? 'diperbarui' : 'baru');
-      setImportSummary({ new: newCount, updated: updatedCount, total: importPreview.rows.length, newNames, updatedDetails, rejected });
+      
+      let defaultTab: 'baru' | 'diperbarui' | 'dilewati' | 'ditolak' = updatedCount > 0 ? 'diperbarui' : 'baru';
+      if (newCount === 0 && updatedCount === 0) {
+          defaultTab = rejectedDetails.length > 0 ? 'ditolak' : 'dilewati';
+      }
+      setSummaryTab(defaultTab);
+      setImportSummary({ 
+        new: newCount, updated: updatedCount, total: importPreview.rows.length, 
+        newNames, updatedDetails, rejected: rejectedDetails.length, 
+        rejectedDetails, skippedDetails 
+      });
       
       fetchParticipants(); 
     }
@@ -1556,22 +1574,32 @@ const AdminDashboard: React.FC = () => {
               )}
 
               {/* TABS HEADER */}
-              {(importSummary.new > 0 || importSummary.updated > 0) && (
-                <div className="flex items-center gap-2 mb-3 border-b border-white/10 pb-2">
-                  <button
-                    onClick={() => setSummaryTab('diperbarui')}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'diperbarui' ? 'bg-violet-500/20 text-violet-300' : 'text-white/40 hover:bg-white/5'}`}
-                  >
-                    Diperbarui ({importSummary.updated})
-                  </button>
-                  <button
-                    onClick={() => setSummaryTab('baru')}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'baru' ? 'bg-emerald-500/20 text-emerald-300' : 'text-white/40 hover:bg-white/5'}`}
-                  >
-                    Data Baru ({importSummary.new})
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2 mb-3 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
+                <button
+                  onClick={() => setSummaryTab('diperbarui')}
+                  className={`flex-1 whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'diperbarui' ? 'bg-violet-500/20 text-violet-300' : 'text-white/40 hover:bg-white/5'}`}
+                >
+                  Diperbarui ({importSummary.updated})
+                </button>
+                <button
+                  onClick={() => setSummaryTab('baru')}
+                  className={`flex-1 whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'baru' ? 'bg-emerald-500/20 text-emerald-300' : 'text-white/40 hover:bg-white/5'}`}
+                >
+                  Data Baru ({importSummary.new})
+                </button>
+                <button
+                  onClick={() => setSummaryTab('dilewati')}
+                  className={`flex-1 whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'dilewati' ? 'bg-slate-500/20 text-slate-300' : 'text-white/40 hover:bg-white/5'}`}
+                >
+                  Dilewati ({(importSummary.skippedDetails || []).length})
+                </button>
+                <button
+                  onClick={() => setSummaryTab('ditolak')}
+                  className={`flex-1 whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg transition ${summaryTab === 'ditolak' ? 'bg-red-500/20 text-red-300' : 'text-white/40 hover:bg-white/5'}`}
+                >
+                  Ditolak ({importSummary.rejected})
+                </button>
+              </div>
 
               {/* TABS CONTENT */}
               <div className="bg-black/20 rounded-xl p-4 border border-white/5 min-h-[150px]">
@@ -1606,6 +1634,40 @@ const AdminDashboard: React.FC = () => {
                       <ul className="text-sm text-white/60 space-y-1.5 list-disc pl-4 text-left">
                         {importSummary.newNames.map((name, i) => (
                           <li key={i}>{name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+
+                {summaryTab === 'dilewati' && (
+                  <>
+                    {(importSummary.skippedDetails || []).length === 0 ? (
+                      <p className="text-sm text-white/40 text-center py-4">Tidak ada data yang dilewati.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {(importSummary.skippedDetails || []).map((item, i) => (
+                          <li key={i} className="text-sm flex flex-col items-start text-left">
+                            <span className="text-white/80 font-medium">{item.name}</span>
+                            <span className="text-[11px] text-white/40 mt-0.5">{item.reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+                
+                {summaryTab === 'ditolak' && (
+                  <>
+                    {(importSummary.rejectedDetails || []).length === 0 ? (
+                      <p className="text-sm text-white/40 text-center py-4">Tidak ada data yang ditolak.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {(importSummary.rejectedDetails || []).map((item, i) => (
+                          <li key={i} className="text-sm flex flex-col items-start text-left">
+                            <span className="text-white/80 font-medium">{item.name}</span>
+                            <span className="text-[11px] text-red-400 mt-0.5 font-medium">{item.reason}</span>
+                          </li>
                         ))}
                       </ul>
                     )}
