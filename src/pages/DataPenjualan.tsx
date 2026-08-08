@@ -3,8 +3,10 @@ import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import {
   Loader2, TrendingUp, CreditCard,
-  Ticket, RefreshCw, Megaphone, PieChart, Activity
+  Ticket, RefreshCw, Megaphone, PieChart, Activity, Download
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 import { currency, getHarga } from '../utils';
 
@@ -50,6 +52,7 @@ const SummaryCard: React.FC<{
 const DataPenjualan: React.FC = () => {
   const [participants, setParticipants] = useState<RTParticipant[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [timeFilter, setTimeFilter]     = useState<'harian' | 'mingguan' | 'bulanan'>('harian');
 
   const fetchData = async () => {
@@ -60,6 +63,208 @@ const DataPenjualan: React.FC = () => {
       .order('created_at', { ascending: false });
     setParticipants(data || []);
     setLoading(false);
+  };
+
+  const downloadPDF = async () => {
+    try {
+      setIsDownloading(true);
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      
+      // Title
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('LAPORAN ANALISA PENJUALAN', pageWidth / 2, 20, { align: 'center' });
+      
+      // Date and Time
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      pdf.text(`Waktu Cetak: ${dateStr} ${timeStr}`, pageWidth / 2, 27, { align: 'center' });
+      
+      // Table 1: Ringkasan Umum
+      autoTable(pdf, {
+        startY: 35,
+        head: [['Deskripsi', 'Jumlah']],
+        body: [
+          ['Total Tiket Terjual (Lunas)', String(stats.totalLunasTiket)],
+          ['Total Tiket Dipesan (Pending)', String(stats.pending)],
+          ['Pendapatan Bersih (Lunas)', currency(stats.pendapatanLunas)],
+          ['Potensi Pendapatan (Pending)', currency(stats.pendapatanPotensi)],
+          ['Tingkat Konversi', `${stats.konversiRate}%`]
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [124, 58, 237] }
+      });
+
+      // Table 2: Performa Jenis Tiket
+      const jenisBody = Object.entries(stats.byJenis).map(([jenis, data]) => [
+        jenis,
+        `${data.count} Pendaftar`,
+        `${data.lunas} Tiket Lunas`,
+        currency(data.pendapatan)
+      ]);
+      
+      autoTable(pdf, {
+        startY: (pdf as any).lastAutoTable.finalY + 10,
+        head: [['Jenis Tiket', 'Pendaftar', 'Lunas', 'Pendapatan']],
+        body: jenisBody,
+        theme: 'striped',
+        headStyles: { fillColor: [124, 58, 237] }
+      });
+      
+      // Table 3: Metode Pembayaran
+      const metodeBody = Object.entries(stats.byMetode).map(([metode, data]) => [
+        metode,
+        `${data.count} Tiket Dipesan`,
+        `${data.lunas} Tiket Lunas`,
+        `${data.count > 0 ? Math.round((data.lunas / data.count) * 100) : 0}% Lunas`
+      ]);
+
+      autoTable(pdf, {
+        startY: (pdf as any).lastAutoTable.finalY + 10,
+        head: [['Metode Pembayaran', 'Dipesan', 'Lunas', 'Persentase Lunas']],
+        body: metodeBody,
+        theme: 'striped',
+        headStyles: { fillColor: [124, 58, 237] }
+      });
+
+      // Table 4: Tren Pendaftaran
+      const trendBody = stats.trendData.map(d => [
+        d.label,
+        `${d.count} Tiket`,
+        currency(d.revenue)
+      ]);
+
+      autoTable(pdf, {
+        startY: (pdf as any).lastAutoTable.finalY + 10,
+        head: [['Periode / Tren', 'Tiket Terjual', 'Pendapatan']],
+        body: trendBody,
+        theme: 'striped',
+        headStyles: { fillColor: [124, 58, 237] }
+      });
+
+      // Table 5: Sumber Info
+      const sumberBody = Object.entries(stats.bySumber).map(([sumber, count]) => [
+        sumber,
+        `${count} Pendaftar`,
+        `${stats.totalSumberResponses > 0 ? Math.round((count / stats.totalSumberResponses) * 100) : 0}%`
+      ]);
+
+      if (sumberBody.length > 0) {
+        autoTable(pdf, {
+          startY: (pdf as any).lastAutoTable.finalY + 10,
+          head: [['Sumber Info / Marketing', 'Jumlah Pendaftar', 'Persentase']],
+          body: sumberBody.sort((a, b) => parseInt(b[1]) - parseInt(a[1])),
+          theme: 'striped',
+          headStyles: { fillColor: [124, 58, 237] }
+        });
+      }
+
+      // --- Native PDF Line Chart Drawing ---
+      let currentY = (pdf as any).lastAutoTable.finalY + 15;
+      
+      // Check if we need a new page for the chart
+      if (currentY + 70 > pdf.internal.pageSize.getHeight()) {
+        pdf.addPage();
+        currentY = 20;
+      }
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Grafik Tren Pendaftaran (Line Chart)', 14, currentY);
+      
+      currentY += 10;
+      const chartX = 25;
+      const chartY = currentY;
+      const chartWidth = pageWidth - 45;
+      const chartHeight = 50;
+      
+      // Draw axes
+      pdf.setDrawColor(200, 200, 200);
+      pdf.setLineWidth(0.5);
+      // Y axis
+      pdf.line(chartX, chartY, chartX, chartY + chartHeight);
+      // X axis
+      pdf.line(chartX, chartY + chartHeight, chartX + chartWidth, chartY + chartHeight);
+      
+      // Draw Grid Lines
+      pdf.setDrawColor(240, 240, 240);
+      pdf.line(chartX, chartY + (chartHeight * 0.25), chartX + chartWidth, chartY + (chartHeight * 0.25));
+      pdf.line(chartX, chartY + (chartHeight * 0.5), chartX + chartWidth, chartY + (chartHeight * 0.5));
+      pdf.line(chartX, chartY + (chartHeight * 0.75), chartX + chartWidth, chartY + (chartHeight * 0.75));
+
+      // Draw data
+      if (stats.trendData.length > 0) {
+        const maxCount = Math.max(...stats.trendData.map(d => d.count), 1);
+        const stepX = chartWidth / (stats.trendData.length > 1 ? stats.trendData.length - 1 : 1);
+        
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        
+        let prevX = -1;
+        let prevY = -1;
+
+        stats.trendData.forEach((d, i) => {
+          // X position
+          const x = chartX + (i * stepX);
+          // Height of the point
+          const plotHeight = chartHeight - 10;
+          const y = chartY + chartHeight - ((d.count / maxCount) * plotHeight);
+          
+          // Draw line from previous point
+          if (prevX !== -1 && prevY !== -1) {
+             pdf.setDrawColor(124, 58, 237); // violet-600
+             pdf.setLineWidth(1.5);
+             pdf.line(prevX, prevY, x, y);
+          }
+          
+          prevX = x;
+          prevY = y;
+        });
+
+        // Draw points and labels on top
+        stats.trendData.forEach((d, i) => {
+          const x = chartX + (i * stepX);
+          const plotHeight = chartHeight - 10;
+          const y = chartY + chartHeight - ((d.count / maxCount) * plotHeight);
+          
+          // Draw point circle
+          pdf.setFillColor(255, 255, 255);
+          pdf.setDrawColor(124, 58, 237);
+          pdf.setLineWidth(1);
+          pdf.circle(x, y, 1.5, 'FD'); // Fill and Stroke
+          
+          // Value label above point
+          if (d.count > 0) {
+            pdf.text(String(d.count), x, y - 3, { align: 'center' });
+          }
+          
+          // X axis label
+          const label = d.label;
+          pdf.text(label, x, chartY + chartHeight + 5, { align: 'center', maxWidth: stepX + 5 });
+        });
+        
+        // Y axis labels
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(String(maxCount), chartX - 3, chartY + 10, { align: 'right' });
+        pdf.text(String(Math.round(maxCount / 2)), chartX - 3, chartY + 10 + ((chartHeight - 10) / 2), { align: 'right' });
+        pdf.text('0', chartX - 3, chartY + chartHeight, { align: 'right' });
+        pdf.setTextColor(0, 0, 0); // reset
+      }
+      
+      const fileName = `Analisis_Penjualan_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}.pdf`;
+      
+      pdf.save(fileName);
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      alert('Gagal mengunduh PDF: ' + (error?.message || String(error)));
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -233,13 +438,23 @@ const DataPenjualan: React.FC = () => {
           <TrendingUp className="w-5 h-5 text-violet-400" />
           <h1 className="text-white font-semibold text-sm tracking-wide">Analisis Penjualan</h1>
         </div>
-        <button
-          onClick={fetchData}
-          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition flex items-center gap-2 text-xs font-medium"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Data</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadPDF}
+            disabled={isDownloading}
+            className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition flex items-center gap-2 text-xs font-medium disabled:opacity-50"
+          >
+            {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span>{isDownloading ? 'Memproses...' : 'Download PDF'}</span>
+          </button>
+          <button
+            onClick={fetchData}
+            className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition flex items-center gap-2 text-xs font-medium"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Data</span>
+          </button>
+        </div>
       </div>
 
       <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-8 w-full max-w-[1600px] mx-auto space-y-6">
@@ -283,8 +498,9 @@ const DataPenjualan: React.FC = () => {
               />
             </div>
 
-            {/* ── Middle Row: Daily Trend & Sumber Info ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div id="pdf-charts" className="space-y-4 sm:space-y-6">
+              {/* ── Middle Row: Daily Trend & Sumber Info ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               
               {/* Trend Harian */}
               <div className="lg:col-span-2 rounded-2xl border border-white/5 p-5 sm:p-6 bg-white/[0.02]">
@@ -591,6 +807,7 @@ const DataPenjualan: React.FC = () => {
 
             </div>
 
+            </div>
           </>
         )}
       </div>
