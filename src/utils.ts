@@ -23,6 +23,10 @@ export const normalizeJenisTiket = (jenis: string) => {
     return 'Silver Diskon 50K';
   }
 
+  if (upper.includes('VVIP')) {
+    return 'VVIP';
+  }
+
   if (upper.includes('SILVER')) {
     return 'Silver 150K';
   }
@@ -44,6 +48,7 @@ const HARGA_TIKET: Record<string, number> = {
   'early bird': 75000,
   'reguler':    110000,
   'regular':    110000,
+  'vvip':       0,
   'vip':        150000,
   'gold':       200000,
   'silver':     150000,

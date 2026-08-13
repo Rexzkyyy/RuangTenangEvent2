@@ -14,6 +14,7 @@ import { currency, getHarga } from '../utils';
 function normalizeJenis(jenis: string): string {
   if (!jenis) return 'Lainnya';
   const lower = jenis.toLowerCase();
+  if (lower.includes('vvip')) return 'VVIP';
   if (lower.includes('gold')) return 'Gold';
   if (lower.includes('silver')) return 'Silver';
   if (lower.includes('reguler') || lower.includes('regular')) return 'Reguler';

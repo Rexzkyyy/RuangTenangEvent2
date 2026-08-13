@@ -10,6 +10,8 @@
   --gold:       #C8962C;
   --gold-light: #E8B84B;
   --gold-pale:  #F5E6C8;
+  --vvip:       #6B21A8;
+  --vvip-light: #A855F7;
   --navy:       #0A1128;
   --navy-mid:   #1A2545;
   --cream:      #FDF8F0;
@@ -421,6 +423,12 @@
   box-shadow: 0 2px 8px rgba(202,138,4,0.3);
 }
 
+.rt-info-value.highlight.vvip-tier {
+  background: linear-gradient(135deg, #F3E8FF, #A855F7);
+  color: #3B0764;
+  box-shadow: 0 2px 8px rgba(168,85,247,0.3);
+}
+
 .rt-info-value.highlight.silver-tier {
   background: linear-gradient(135deg, #E2E8F0, #94A3B8);
   color: #0F172A;
@@ -627,6 +635,7 @@
 .badge-reguler { color: var(--wine); font-weight: 700; font-size: 0.7rem; background: rgba(139,26,56,0.1); padding: 2px 8px; border-radius: 4px; }
 .badge-silver { color: #64748b; font-weight: 700; font-size: 0.7rem; background: rgba(100,116,139,0.1); padding: 2px 8px; border-radius: 4px; }
 .badge-gold { color: var(--gold); font-weight: 700; font-size: 0.7rem; background: rgba(200,150,44,0.1); padding: 2px 8px; border-radius: 4px; }
+.badge-vvip { color: var(--vvip); font-weight: 700; font-size: 0.7rem; background: rgba(107,33,168,0.1); padding: 2px 8px; border-radius: 4px; }
 
 .rt-stub-contacts {
   display: flex;

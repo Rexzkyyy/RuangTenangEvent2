@@ -18,6 +18,7 @@ import type { RTParticipant } from '../types';
 /* ─── Helper: Tier Badge Class ───────────────────────────── */
 const getTierClass = (jenis: string): string => {
   const n = normalizeJenisTiket(jenis).toLowerCase();
+  if (n.includes('vvip'))   return 'highlight vvip-tier';
   if (n.includes('gold'))   return 'highlight gold-tier';
   if (n.includes('silver')) return 'highlight silver-tier';
   return 'highlight reguler-tier';
@@ -26,6 +27,7 @@ const getTierClass = (jenis: string): string => {
 /* ─── Helper: Tier Icon ──────────────────────────────────── */
 const TierIcon: React.FC<{ jenis: string }> = ({ jenis }) => {
   const n = normalizeJenisTiket(jenis).toLowerCase();
+  if (n.includes('vvip'))   return <span>★</span>;
   if (n.includes('gold'))   return <span>♛</span>;
   if (n.includes('silver')) return <span>♜</span>;
   return <span>◉</span>;
@@ -324,6 +326,7 @@ const PublicTicket: React.FC = () => {
                     <li><span className="badge-reguler">REGULER</span> <strong>110.000</strong></li>
                     <li><span className="badge-silver">SILVER</span> <strong>150.000</strong></li>
                     <li><span className="badge-gold">GOLD</span> <strong>200.000</strong></li>
+                    <li><span className="badge-vvip">VVIP</span> <strong>-</strong></li>
                   </ul>
                 </div>
 

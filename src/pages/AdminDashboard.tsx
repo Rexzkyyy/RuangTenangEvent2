@@ -81,6 +81,7 @@ const StatCard: React.FC<{
 function normalizeJenis(jenis: string): string {
   if (!jenis) return 'Lainnya';
   const lower = jenis.toLowerCase();
+  if (lower.includes('vvip')) return 'VVIP';
   if (lower.includes('gold')) return 'Gold';
   if (lower.includes('silver')) return 'Silver';
   if (lower.includes('reguler') || lower.includes('regular')) return 'Reguler';
@@ -541,7 +542,7 @@ const AdminDashboard: React.FC = () => {
         String(extP.no_whatsapp || '').replace(/\D/g, '') === String(newP.no_whatsapp || '').replace(/\D/g, '')
       );
 
-      const validTypes = ['Silver', 'Gold', 'Reguler'];
+      const validTypes = ['Silver', 'Gold', 'Reguler', 'VVIP'];
       const newJenisTiket = normalizeJenis(newP.jenis_tiket || '');
       const isValidType = validTypes.includes(newJenisTiket);
 
@@ -1433,6 +1434,7 @@ const AdminDashboard: React.FC = () => {
                       <option value="Reguler 110K">Reguler (Rp110.000)</option>
                       <option value="Silver 150K">Silver (Rp150.000)</option>
                       <option value="Gold 200K">Gold (Rp200.000)</option>
+                      <option value="VVIP">VVIP</option>
                     </select>
                 </div>
                 <div>
