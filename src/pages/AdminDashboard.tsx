@@ -358,7 +358,7 @@ const AdminDashboard: React.FC = () => {
   const sendKonfirmasiWhatsApp = useCallback(async (p: RTParticipant) => {
     const qty = p.jumlah_tiket || 1;
     const kuotaText = qty > 1 ? `Karena kuota tiket yang kaka punya ada ${qty}, ` : ``;
-    const message = `Hallo kaka ${p.nama_lengkap}\n\nKami dari Panitia dr. Aisah Dahlan ingin mengkonfirmasi dengan siapa nantinya kaka ${p.nama_lengkap} akan datang ke Event Kajian & Parenting Class?\n\n${kuotaText}boleh disebutkan nama dan jenis kelamin peserta nantinya?\n\nAgar mempermudah panitia dalam penyusunan kursi event?`;
+    const message = `Hallo kaka ${p.nama_lengkap}\n\nKami dari Panitia dr. Aisah Dahlan ingin mengkonfirmasi dengan siapa nantinya kaka ${p.nama_lengkap} akan datang ke Event Kajian & Parenting Class?\n\n${kuotaText}boleh disebutkan nama dan gender peserta nantinya?\n\nAgar mempermudah panitia dalam penyusunan kursi event?`;
     const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`, '_blank');
   }, []);
