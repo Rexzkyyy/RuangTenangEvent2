@@ -106,10 +106,11 @@ const ParticipantCard: React.FC<{
   onDetail: () => void;
   onToggle: () => void;
   onWa: () => void;
+  onWaKonfirmasi: () => void;
   onToggleWa: () => void;
   onDelete: () => void;
   showCheckin?: boolean;
-}> = ({ p, index, onDetail, onToggle, onWa, onToggleWa, onDelete, showCheckin }) => {
+}> = ({ p, index, onDetail, onToggle, onWa, onWaKonfirmasi, onToggleWa, onDelete, showCheckin }) => {
   const isLunas = p.status_pembayaran === 'Lunas';
   const checkinPct = ((p.jumlah_checkin || 0) / (p.jumlah_tiket || 1)) * 100;
   const waValidation = validatePhoneNumber(p.no_whatsapp || '');
@@ -205,6 +206,14 @@ const ParticipantCard: React.FC<{
         >
           {p.status_wa ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
           <span>{p.status_wa ? 'WA Terkirim' : 'Belum WA'}</span>
+        </button>
+        <button
+          onClick={onWaKonfirmasi}
+          className="flex items-center gap-1.5 text-xs font-medium transition px-2.5 h-[30px] rounded-lg border text-sky-300 bg-sky-500/20 border-sky-500/30 hover:bg-sky-500/30"
+          title="Kirim Konfirmasi WA"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          <span>Konfirmasi</span>
         </button>
         <button
           onClick={onWa}
@@ -342,6 +351,14 @@ const AdminDashboard: React.FC = () => {
     const ticketUrl = `${window.location.origin}/t/${p.id}`;
     const ticketCode = formatTicketCode(p.barcode || p.id || '');
     const message = `Halo Kak *${p.nama_lengkap}*!\n\nTerimakasih banyak telah mendaftar di acara Kajian Parenting & Healing Class Bersama Dr. Aisa Dahlan. Kami sangat antusias menyambut kehadiran kakak!\n\nBerikut adalah rincian E-Tiket Kakak:\n\n*Nomor Tiket:* ${ticketCode}\n*Kategori Tiket:* ${p.jenis_tiket}\n*Jumlah Tiket:* ${p.jumlah_tiket} Orang\n*Waktu:* Kamis, 3 Sept 2026 (08.00 - 12.00 WITA)\n*Lokasi:* Hotel Zahra Syariah, Kendari\n\n*Link E-Tiket:* \n${ticketUrl}\n\nMohon siapkan dan tunjukkan barcode yang ada di link tersebut kepada panitia saat registrasi ulang ya.\n\nSampai jumpa di acara nanti! Semoga harinya menyenangkan.`;
+    const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
+    window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`, '_blank');
+  }, []);
+
+  const sendKonfirmasiWhatsApp = useCallback(async (p: RTParticipant) => {
+    const qty = p.jumlah_tiket || 1;
+    const kuotaText = qty > 1 ? `Karena kuota tiket yang kaka punya ada ${qty}, ` : ``;
+    const message = `Hallo kaka ${p.nama_lengkap}\n\nKami dari Panitia dr. Aisah Dahlan ingin mengkonfirmasi dengan siapa nantinya kaka ${p.nama_lengkap} akan datang ke Event Kajian & Parenting Class?\n\n${kuotaText}boleh disebutkan nama dan jenis kelamin peserta nantinya?\n\nAgar mempermudah panitia dalam penyusunan kursi event?`;
     const waNumber = (p.no_whatsapp || '').replace(/\D/g, '');
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`, '_blank');
   }, []);
@@ -1030,6 +1047,7 @@ const AdminDashboard: React.FC = () => {
                 onDetail={() => setDetailParticipant(p)}
                 onToggle={() => toggleStatus(p.id!, p.status_pembayaran!)}
                 onWa={() => sendWhatsApp(p)}
+                onWaKonfirmasi={() => sendKonfirmasiWhatsApp(p)}
                 onToggleWa={() => toggleWAStatus(p)}
                 onDelete={() => deleteParticipant(p.id!, p.nama_lengkap)}
                 showCheckin={activeTab === 'Sudah Hadir'}
@@ -1209,6 +1227,12 @@ const AdminDashboard: React.FC = () => {
                               >
                                 <ExternalLink className="w-3.5 h-3.5" /> E-Tiket
                               </a>
+                              <button
+                                onClick={() => { sendKonfirmasiWhatsApp(p); setOpenActionId(null); }}
+                                className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-sky-400 hover:bg-white/5 transition flex items-center gap-2"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" /> Konfirmasi WA
+                              </button>
                               <button
                                 onClick={() => { sendWhatsApp(p); setOpenActionId(null); }}
                                 className="w-full text-left px-4 py-2.5 text-[11px] font-medium text-emerald-400 hover:bg-white/5 transition flex items-center gap-2"
