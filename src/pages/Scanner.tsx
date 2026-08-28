@@ -54,27 +54,33 @@ const Scanner: React.FC = () => {
 
     try {
       const text = decodedText.trim();
+      const cleanText = text.replace(/^PY-/i, '').toLowerCase();
       
-      // Try by ID first, then by Barcode (since public ticket could use either)
-      let { data, error } = await supabase
+      let data = null;
+
+      // 1. Fetch all data for robust client-side searching (avoids UUID cast errors in Supabase)
+      const { data: allData } = await supabase
         .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-        .select('*')
-        .eq('id', text)
-        .single();
-        
-      if (error || !data) {
-        const { data: bData, error: bError } = await supabase
-          .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-          .select('*')
-          .eq('barcode', text)
-          .single();
-        
-        if (bError || !bData) {
-          setScanResult({ success: false, message: 'Tiket Tidak Valid / Tidak Ditemukan!', type: 'error' });
-          // Do NOT return early — fall through to finally to reset state
-        } else {
-          data = bData;
+        .select('*');
+
+      if (allData) {
+        // 2. Exact match on UUID or startswith on Short ID (e.g. PY-101EFE3C -> 101efe3c)
+        data = allData.find(p => 
+          (p.id && p.id.toLowerCase().startsWith(cleanText)) || 
+          (p.barcode && p.barcode.toLowerCase().startsWith(cleanText))
+        );
+
+        // 3. Fallback: Search by WhatsApp or Name
+        if (!data) {
+          data = allData.find(p => 
+            (p.no_whatsapp && p.no_whatsapp.includes(text)) || 
+            (p.nama_lengkap && p.nama_lengkap.toLowerCase().includes(text.toLowerCase()))
+          );
         }
+      }
+
+      if (!data) {
+        setScanResult({ success: false, message: 'Tiket Tidak Valid / Tidak Ditemukan!', type: 'error' });
       }
 
       // Only continue processing if we found valid data
@@ -458,8 +464,8 @@ const Scanner: React.FC = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'white', fontWeight: 700 }}>Input Barcode Manual</h3>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#a5b4fc' }}>Ketik ID tiket / Barcode peserta</p>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'white', fontWeight: 700 }}>Pencarian Tiket Manual</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#a5b4fc' }}>Ketik Kode (PY-xxx), No WA, atau Nama</p>
                 </div>
                 <button
                   onClick={() => setShowManualInput(false)}
@@ -473,7 +479,7 @@ const Scanner: React.FC = () => {
                 type="text"
                 value={manualBarcode}
                 onChange={(e) => setManualBarcode(e.target.value)}
-                placeholder="Contoh: id-tiket-123"
+                placeholder="Contoh: PY-101EFE3C / 0812... / Budi"
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') handleManualSubmit(); }}
                 style={{
