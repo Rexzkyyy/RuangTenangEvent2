@@ -36,9 +36,11 @@ const Scanner: React.FC = () => {
     lastScanTimestamp.current = now;
     setIsProcessing(true);
 
+    // Pause scanner INSIDE main try-finally so it always gets cleaned up
     try {
-      if (scannerRef.current?.getState() === 2) {
-        scannerRef.current.pause(true);
+      const scannerState = scannerRef.current?.getState();
+      if (scannerState === 2) {
+        scannerRef.current!.pause(true);
       }
     } catch (_) {}
 
@@ -61,68 +63,73 @@ const Scanner: React.FC = () => {
         
         if (bError || !bData) {
           setScanResult({ success: false, message: 'Tiket Tidak Valid / Tidak Ditemukan!', type: 'error' });
-          return;
+          // Do NOT return early — fall through to finally to reset state
+        } else {
+          data = bData;
         }
-        data = bData;
       }
 
-      // -- AUTO APPROVE LOGIC --
-      const whatsapp = data.no_whatsapp || '';
-      
-      const { data: groupData } = await supabase
-        .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-        .select('*')
-        .eq('no_whatsapp', whatsapp);
+      // Only continue processing if we found valid data
+      if (data) {
+        // -- AUTO APPROVE LOGIC --
+        const whatsapp = data.no_whatsapp || '';
+        
+        const { data: groupData } = await supabase
+          .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+          .select('*')
+          .eq('no_whatsapp', whatsapp);
 
-      const fullGroupRows = groupData || [data];
-      
-      // Check if any in group is Lunas
-      const isGroupPaid = fullGroupRows.some(r => r.status_pembayaran === 'Lunas');
+        const fullGroupRows = groupData || [data];
+        
+        // Check if any in group is Lunas
+        const isGroupPaid = fullGroupRows.some(r => r.status_pembayaran === 'Lunas');
 
-      if (!isGroupPaid) {
-        setScanResult({ 
-          success: false, 
-          message: 'Status Pembayaran Rombongan Belum LUNAS!', 
-          type: 'warning',
-          participant: data 
-        });
-      } else {
-        // Individual Quota Check
-        if (data.jumlah_checkin >= data.jumlah_tiket) {
+        if (!isGroupPaid) {
           setScanResult({ 
             success: false, 
-            message: `AKSES DITOLAK: Kuota tiket ini habis!`, 
-            type: 'error',
-            participant: data
+            message: 'Status Pembayaran Rombongan Belum LUNAS!', 
+            type: 'warning',
+            participant: data 
           });
         } else {
-          // Success Path - Increment own checkin
-          const newCheckinCount = (data.jumlah_checkin || 0) + 1;
-          const waktuCheckin = new Date().toISOString();
-          
-          await supabase
-            .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-            .update({ 
-              jumlah_checkin: newCheckinCount,
-              waktu_absen: waktuCheckin // if schema supports it, harmless if not but helps tracking
-            })
-            .eq('id', data.id);
+          // Individual Quota Check
+          if (data.jumlah_checkin >= data.jumlah_tiket) {
+            setScanResult({ 
+              success: false, 
+              message: `AKSES DITOLAK: Kuota tiket ini habis!`, 
+              type: 'error',
+              participant: data
+            });
+          } else {
+            // Success Path - Increment own checkin
+            const newCheckinCount = (data.jumlah_checkin || 0) + 1;
+            const waktuCheckin = new Date().toISOString();
             
-          const updatedParticipant = { ...data, jumlah_checkin: newCheckinCount };
-          const sisa = updatedParticipant.jumlah_tiket - newCheckinCount;
-            
-          setScanResult({ 
-            success: true, 
-            message: `Berhasil Check-in! (${newCheckinCount}/${updatedParticipant.jumlah_tiket}) — Sisa: ${sisa}`, 
-            type: 'success',
-            participant: updatedParticipant
-          });
+            await supabase
+              .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+              .update({ 
+                jumlah_checkin: newCheckinCount,
+                waktu_absen: waktuCheckin
+              })
+              .eq('id', data.id);
+              
+            const updatedParticipant = { ...data, jumlah_checkin: newCheckinCount };
+            const sisa = updatedParticipant.jumlah_tiket - newCheckinCount;
+              
+            setScanResult({ 
+              success: true, 
+              message: `Berhasil Check-in! (${newCheckinCount}/${updatedParticipant.jumlah_tiket}) — Sisa: ${sisa}`, 
+              type: 'success',
+              participant: updatedParticipant
+            });
+          }
         }
       }
     } catch (err) {
       console.error(err);
       setScanResult({ success: false, message: 'Terjadi kesalahan jaringan. Coba lagi.', type: 'error' });
     } finally {
+      // Always reset processing state so scanner can accept the next scan
       isProcessingRef.current = false;
       setIsProcessing(false);
     }
@@ -206,16 +213,25 @@ const Scanner: React.FC = () => {
     };
   }, []);
 
-  const resumeScanning = () => {
+  const resumeScanning = useCallback(() => {
     setScanResult(null);
     isProcessingRef.current = false;
     lastScanTimestamp.current = 0;
     try {
-      if (scannerRef.current?.getState() === 3) {
-        scannerRef.current.resume();
+      const state = scannerRef.current?.getState();
+      if (state === 3) {
+        // Scanner is paused — resume it
+        scannerRef.current!.resume();
+      } else if (state !== 2) {
+        // Scanner is stopped or not started — restart it fully
+        startCamera();
       }
-    } catch (_) {}
-  };
+      // state === 2 means already scanning, nothing to do
+    } catch (_) {
+      // If anything goes wrong, restart camera
+      startCamera();
+    }
+  }, [startCamera]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
