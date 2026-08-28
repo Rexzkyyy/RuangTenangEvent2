@@ -12,6 +12,14 @@ type ScanResult = {
   participant?: RTParticipant;
 } | null;
 
+const SUPPORTED_FORMATS = [
+  Html5QrcodeSupportedFormats.QR_CODE,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+];
+
 const Scanner: React.FC = () => {
   const navigate = useNavigate();
   const [scanResult, setScanResult] = useState<ScanResult>(null);
@@ -135,25 +143,26 @@ const Scanner: React.FC = () => {
     }
   }, []);
 
+
   const startCamera = useCallback(async () => {
+    // Always stop, clear, and destroy old instance to prevent corrupt state
     try {
       if (scannerRef.current?.isScanning) {
         await scannerRef.current.stop();
       }
-    } catch (_) {}
-
-    if (!scannerRef.current) {
-      scannerRef.current = new Html5Qrcode('reader', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-        ],
-        verbose: false,
-      });
+      if (scannerRef.current) {
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+    } catch (_) {
+      scannerRef.current = null;
     }
+
+    // Create fresh instance every time
+    scannerRef.current = new Html5Qrcode('reader', {
+      formatsToSupport: SUPPORTED_FORMATS,
+      verbose: false,
+    });
 
     setCameraError(null);
     setScanResult(null);
@@ -161,7 +170,9 @@ const Scanner: React.FC = () => {
     lastScanTimestamp.current = 0;
 
     const minDim = Math.min(window.innerWidth, window.innerHeight);
-    const qrboxSize = Math.min(Math.floor(minDim * 0.8), 380);
+    const qrboxWidth = Math.min(Math.floor(minDim * 0.8), 380);
+    // Horizontal rectangle for 1D barcode scanning (CODE_128 etc.)
+    const qrboxHeight = Math.floor(qrboxWidth * 0.45);
 
     const onScan = (decodedText: string) => processBarcode(decodedText);
 
@@ -169,8 +180,8 @@ const Scanner: React.FC = () => {
       await scannerRef.current.start(
         { facingMode: 'environment' },
         {
-          fps: 20,
-          qrbox: { width: qrboxSize, height: qrboxSize },
+          fps: 15,
+          qrbox: { width: qrboxWidth, height: qrboxHeight },
           aspectRatio: window.innerHeight / window.innerWidth,
           disableFlip: false,
         },
@@ -183,7 +194,7 @@ const Scanner: React.FC = () => {
         if (devices && devices.length > 0) {
           await scannerRef.current.start(
             devices[devices.length - 1].id,
-            { fps: 20, qrbox: { width: qrboxSize, height: qrboxSize } },
+            { fps: 15, qrbox: { width: qrboxWidth, height: qrboxHeight } },
             onScan,
             () => {}
           );
@@ -235,18 +246,51 @@ const Scanner: React.FC = () => {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !scannerRef.current) return;
+    if (!file) return;
 
     isProcessingRef.current = true;
     setIsProcessing(true);
+
+    // CRITICAL: html5-qrcode cannot scanFile() while camera is active.
+    // Stop the camera scanner first.
     try {
-      const decodedText = await scannerRef.current.scanFile(file, false);
-      await processBarcode(decodedText);
-    } catch {
-      setScanResult({ success: false, message: 'QR Code/Barcode tidak terdeteksi pada gambar.', type: 'error' });
-    } finally {
+      if (scannerRef.current?.isScanning) {
+        await scannerRef.current.stop();
+      }
+      if (scannerRef.current) {
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+    } catch (_) {}
+
+    // Use a dedicated, temporary Html5Qrcode instance for file scanning.
+    // This avoids state conflicts with the camera scanner.
+    const fileScannerEl = document.getElementById('reader-file-scan');
+    if (!fileScannerEl) {
+      setScanResult({ success: false, message: 'Scanner element tidak ditemukan.', type: 'error' });
       isProcessingRef.current = false;
       setIsProcessing(false);
+      return;
+    }
+
+    const fileScanner = new Html5Qrcode('reader-file-scan', {
+      formatsToSupport: SUPPORTED_FORMATS,
+      verbose: false,
+    });
+
+    try {
+      const decodedText = await fileScanner.scanFile(file, true);
+      await processBarcode(decodedText);
+    } catch {
+      setScanResult({ success: false, message: 'QR Code/Barcode tidak terdeteksi pada gambar. Coba foto lebih dekat ke barcode saja.', type: 'error' });
+    } finally {
+      try { fileScanner.clear(); } catch (_) {}
+      isProcessingRef.current = false;
+      setIsProcessing(false);
+      // Restart camera if no result is showing
+      if (!scanResult) {
+        startCamera();
+      }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -295,6 +339,8 @@ const Scanner: React.FC = () => {
           id="reader"
           style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
         />
+        {/* Hidden container for file-based barcode scanning (separate from camera) */}
+        <div id="reader-file-scan" style={{ display: 'none' }} />
 
         {/* Corners overlay */}
         {!scanResult && !cameraError && (

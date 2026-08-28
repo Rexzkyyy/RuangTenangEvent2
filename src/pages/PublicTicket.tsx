@@ -309,8 +309,9 @@ const PublicTicket: React.FC = () => {
               <span className="rt-barcode-label">✦ SCAN FOR ENTRY · NO. TIKET ✦</span>
               <Barcode
                 value={getBarcodeValue()}
-                width={1.6}
-                height={48}
+                format="CODE128"
+                width={2.2}
+                height={65}
                 displayValue={false}
                 background="transparent"
                 lineColor="#1F2937"
