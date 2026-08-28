@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../ticket.css';
 import { useParams } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
+import Barcode from 'react-barcode';
 import { motion } from 'framer-motion';
 import {
   Info, Download, ShieldCheck, Image as ImageIcon,
@@ -307,15 +307,16 @@ const PublicTicket: React.FC = () => {
               </div>
 
               <span className="rt-barcode-label">✦ SCAN FOR ENTRY · NO. TIKET ✦</span>
-              <div style={{ background: '#ffffff', padding: '10px', borderRadius: '12px', display: 'inline-flex', justifyContent: 'center', alignItems: 'center' }}>
-                <QRCodeSVG
-                  value={getBarcodeValue()}
-                  size={140}
-                  bgColor="#ffffff"
-                  fgColor="#1F2937"
-                  level="M"
-                />
-              </div>
+              <Barcode
+                value={formatTicketCode(getBarcodeValue())}
+                format="CODE128"
+                width={2.2}
+                height={65}
+                displayValue={false}
+                background="transparent"
+                lineColor="#1F2937"
+                renderer="img"
+              />
               <div className="rt-barcode-value">{formatTicketCode(getBarcodeValue())}</div>
 
               {/* Compact Pricing & Contact in Stub */}
