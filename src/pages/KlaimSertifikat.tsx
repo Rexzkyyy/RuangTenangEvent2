@@ -312,33 +312,24 @@ const KlaimSertifikat: React.FC = () => {
               <div className="mt-8">
                 <h4 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-3 px-1">Status E-Sertifikat</h4>
                 <div className="space-y-2">
-                  {claimedList.map((claim, idx) => {
-                    const isReleased = new Date().getHours() >= 13;
-                    return (
-                      <div key={idx} className="bg-black/30 border border-white/5 rounded-xl p-3 px-4 flex justify-between items-center">
-                        <div>
-                          <p className="font-semibold text-sm">{claim.nama_lengkap}</p>
-                          <p className="text-xs text-white/40">{claim.no_whatsapp}</p>
-                        </div>
-                        
-                        {isReleased ? (
-                          <button 
-                            onClick={() => {
-                              setGeneratedClaim(claim);
-                              setStep(3);
-                            }}
-                            className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer"
-                          >
-                            <Download size={14} /> Klaim
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
-                            <Clock size={14} /> Pending
-                          </div>
-                        )}
+                  {claimedList.map((claim, idx) => (
+                    <div key={idx} className="bg-black/30 border border-white/5 rounded-xl p-3 px-4 flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-sm">{claim.nama_lengkap}</p>
+                        <p className="text-xs text-white/40">{claim.no_whatsapp}</p>
                       </div>
-                    );
-                  })}
+                      
+                      <button 
+                        onClick={() => {
+                          setGeneratedClaim(claim);
+                          setStep(3);
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer"
+                      >
+                        <Download size={14} /> Klaim
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -353,13 +344,10 @@ const KlaimSertifikat: React.FC = () => {
               </div>
               <h2 className="text-2xl font-bold text-white mb-2">Terima Kasih, {generatedClaim.nama_lengkap.split(' ')[0]}!</h2>
               <p className="text-white/70">
-                {new Date().getHours() >= 13 
-                  ? "E-Sertifikat kehadiran Anda sudah siap diunduh." 
-                  : "Data kehadiran Anda telah berhasil tersimpan di Buku Tamu kami."}
+                E-Sertifikat kehadiran Anda sudah siap diunduh.
               </p>
             </div>
 
-            {new Date().getHours() >= 13 ? (
               <>
                 <div className="bg-white/5 border border-white/10 p-4 rounded-xl">
                   <p className="text-sm text-white/70 text-center mb-4">Preview Sertifikat Anda:</p>
@@ -424,17 +412,6 @@ const KlaimSertifikat: React.FC = () => {
                   )}
                 </button>
               </>
-            ) : (
-              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-6 text-center">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </div>
-                <h3 className="text-lg font-medium text-white mb-2">E-Sertifikat Sedang Diproses</h3>
-                <p className="text-white/70 text-sm leading-relaxed">
-                  E-Sertifikat Anda akan dapat diunduh di halaman ini mulai pukul <strong className="text-indigo-300">13:00 WIB</strong> hari ini. Silakan kembali lagi nanti.
-                </p>
-              </div>
-            )}
 
             <button 
               onClick={() => setStep(2)}
