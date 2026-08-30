@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Download, CheckCircle2, AlertCircle, Gift, Clock, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle2, AlertCircle, Gift, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { RTParticipant, RTCertificateClaim } from '../types';
 import * as htmlToImage from 'html-to-image';
