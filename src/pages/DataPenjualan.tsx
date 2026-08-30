@@ -3,8 +3,10 @@ import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import {
   Loader2, TrendingUp, CreditCard,
-  Ticket, RefreshCw, Megaphone, PieChart, Activity, Download
+  Ticket, RefreshCw, Megaphone, PieChart, Activity, Download,
+  FileSpreadsheet, Users
 } from 'lucide-react';
+import ExcelJS from 'exceljs';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -55,13 +57,18 @@ const DataPenjualan: React.FC = () => {
   const [loading, setLoading]           = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [timeFilter, setTimeFilter]     = useState<'harian' | 'mingguan' | 'bulanan'>('harian');
+  const [activeDemografiTab, setActiveDemografiTab] = useState<'Semua' | 'Laki-laki' | 'Perempuan' | 'Kosong'>('Semua');
 
   const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
       .select('*')
       .order('created_at', { ascending: false });
+      
+    if (error) {
+      console.error(error);
+    }
     setParticipants(data || []);
     setLoading(false);
   };
@@ -427,6 +434,105 @@ const DataPenjualan: React.FC = () => {
     };
   }, [participants, timeFilter]);
 
+  /* ── Excel Export ── */
+  const exportDemografiExcel = async () => {
+    if (participants.length === 0) {
+      alert('Tidak ada data peserta untuk di-export.');
+      return;
+    }
+
+    const laki = participants.filter(p => (p.jenis_kelamin?.trim().toUpperCase() || '').startsWith('L'));
+    const perempuan = participants.filter(p => (p.jenis_kelamin?.trim().toUpperCase() || '').startsWith('P'));
+    const kosong = participants.filter(p => {
+      const g = (p.jenis_kelamin?.trim().toUpperCase() || '');
+      return !g.startsWith('L') && !g.startsWith('P');
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Ruang Tenang Admin';
+    workbook.created = new Date();
+
+    const addSheet = (data: any[], defaultGender: string, sheetName: string) => {
+      const ws = workbook.addWorksheet(sheetName, {
+        views: [{ state: 'frozen', ySplit: 1 }] // Freeze header row
+      });
+
+      // Definisikan kolom
+      ws.columns = [
+        { header: 'No', key: 'no', width: 6 },
+        { header: 'Nama Lengkap', key: 'nama', width: 35 },
+        { header: 'No WhatsApp', key: 'wa', width: 20 },
+        { header: 'Gender', key: 'gender', width: 15 },
+        { header: 'Jenis Tiket', key: 'tiket', width: 20 },
+        { header: 'Status Pembayaran', key: 'status', width: 22 },
+      ];
+
+      // Style Header
+      const headerRow = ws.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4F46E5' } // Indigo color
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Add Data
+      data.forEach((p, i) => {
+        const row = ws.addRow({
+          no: i + 1,
+          nama: p.nama_lengkap,
+          wa: p.no_whatsapp,
+          gender: p.jenis_kelamin || defaultGender || '-',
+          tiket: p.jenis_tiket,
+          status: p.status_pembayaran
+        });
+        
+        // Custom alignment & styling
+        row.getCell('no').alignment = { horizontal: 'center' };
+        row.getCell('gender').alignment = { horizontal: 'center' };
+        row.getCell('status').alignment = { horizontal: 'center' };
+
+        // Color coding for status
+        if (p.status_pembayaran === 'Lunas') {
+          row.getCell('status').font = { color: { argb: 'FF10B981' }, bold: true }; // Emerald green
+        } else {
+          row.getCell('status').font = { color: { argb: 'FFF59E0B' }, bold: true }; // Amber orange
+        }
+      });
+
+      // Add borders to all cells
+      ws.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            right: { style: 'thin', color: { argb: 'FFDDDDDD' } }
+          };
+        });
+      });
+    };
+
+    addSheet(laki, 'Laki-laki', 'Laki-laki');
+    addSheet(perempuan, 'Perempuan', 'Perempuan');
+    addSheet(kosong, '', 'Kosong');
+
+    // Buat file dan trigger download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    
+    const now = new Date();
+    const fileName = `Demografi_Peserta_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}.xlsx`;
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   /* ── Render ─────────────────────────────────────────────── */
   return (
     <div className="min-h-full pb-10">
@@ -498,6 +604,130 @@ const DataPenjualan: React.FC = () => {
                 color="linear-gradient(135deg, #0ea5e9, #0369a1)"
               />
             </div>
+
+            {/* ── Data Peserta Tiket (Demografi) ── */}
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] mt-6 overflow-hidden">
+              <div className="p-5 sm:p-6 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500/20 rounded-lg">
+                    <Users className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold">Data Peserta Tiket (Laki-laki / Perempuan)</h2>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-white/40 text-xs">Total: {participants.length}</p>
+                      <span className="text-white/20 text-xs">&bull;</span>
+                      <p className="text-indigo-400 text-xs font-medium">{participants.filter(p => (p.jenis_kelamin?.trim().toUpperCase() || '').startsWith('L')).length} Laki-laki</p>
+                      <span className="text-white/20 text-xs">&bull;</span>
+                      <p className="text-pink-400 text-xs font-medium">{participants.filter(p => (p.jenis_kelamin?.trim().toUpperCase() || '').startsWith('P')).length} Perempuan</p>
+                      <span className="text-white/20 text-xs">&bull;</span>
+                      <p className="text-white/30 text-xs">{participants.length - participants.filter(p => (p.jenis_kelamin?.trim().toUpperCase() || '').startsWith('L')).length - participants.filter(p => (p.jenis_kelamin?.trim().toUpperCase() || '').startsWith('P')).length} Kosong</p>
+                    </div>
+                    <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-2 custom-scrollbar">
+                      {['Semua', 'Laki-laki', 'Perempuan', 'Kosong'].map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveDemografiTab(tab as any)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                            activeDemografiTab === tab 
+                              ? 'bg-violet-500 text-white' 
+                              : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80'
+                          }`}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={exportDemografiExcel}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-emerald-500/30 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Export Excel</span>
+                </button>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 bg-white/[0.01]">
+                      <th className="py-3 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider w-12 text-center">No</th>
+                      <th className="py-3 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Nama Lengkap</th>
+                      <th className="py-3 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">No WhatsApp</th>
+                      <th className="py-3 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider text-center">Gender</th>
+                      <th className="py-3 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider">Jenis Tiket</th>
+                      <th className="py-3 px-5 text-white/40 font-semibold text-[11px] uppercase tracking-wider text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const filteredDemografi = participants.filter(p => {
+                        if (activeDemografiTab === 'Semua') return true;
+                        const pGender = p.jenis_kelamin?.trim().toUpperCase() || '';
+                        if (activeDemografiTab === 'Laki-laki') return pGender.startsWith('L');
+                        if (activeDemografiTab === 'Perempuan') return pGender.startsWith('P');
+                        if (activeDemografiTab === 'Kosong') return !pGender.startsWith('L') && !pGender.startsWith('P');
+                        return true;
+                      });
+                      
+                      if (filteredDemografi.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="py-12 text-center text-white/30 text-sm">Belum ada data peserta untuk kategori ini.</td>
+                          </tr>
+                        );
+                      }
+                      
+                      return (
+                        <>
+                          {filteredDemografi.slice(0, 10).map((p, i) => {
+                            const pGender = p.jenis_kelamin?.trim().toUpperCase() || '-';
+                            const isMale = pGender.startsWith('L');
+                            const isFemale = pGender.startsWith('P');
+                            
+                            return (
+                              <tr key={p.id || i} className="border-b border-white/5 hover:bg-white/[0.02] transition">
+                                <td className="py-3 px-5 text-center text-white/40 text-xs">{i + 1}</td>
+                                <td className="py-3 px-5 text-white/90 font-medium text-sm">{p.nama_lengkap}</td>
+                                <td className="py-3 px-5 text-white/70 text-xs">{p.no_whatsapp}</td>
+                                <td className="py-3 px-5 text-center">
+                                  {isMale ? (
+                                    <span className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold bg-indigo-500/20 text-indigo-300">
+                                      Laki-laki
+                                    </span>
+                                  ) : isFemale ? (
+                                    <span className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold bg-pink-500/20 text-pink-300">
+                                      Perempuan
+                                    </span>
+                                  ) : (
+                                    <span className="text-white/30 text-xs">-</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-5 text-white/70 text-xs font-medium">{p.jenis_tiket}</td>
+                                <td className="py-3 px-5 text-right">
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${p.status_pembayaran === 'Lunas' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-orange-500/15 text-orange-400'}`}>
+                                    {p.status_pembayaran}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {filteredDemografi.length > 10 && (
+                            <tr>
+                              <td colSpan={6} className="py-4 text-center text-white/40 text-xs italic">
+                                Menampilkan 10 data terbaru. Export Excel untuk melihat seluruh {filteredDemografi.length} data {activeDemografiTab !== 'Semua' ? activeDemografiTab : 'peserta'}.
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
 
             <div id="pdf-charts" className="space-y-4 sm:space-y-6">
               {/* ── Middle Row: Daily Trend & Sumber Info ── */}
@@ -806,6 +1036,8 @@ const DataPenjualan: React.FC = () => {
                 )}
               </div>
 
+            </div>
+            
             </div>
 
             </div>

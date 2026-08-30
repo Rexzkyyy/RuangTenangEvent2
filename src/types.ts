@@ -21,3 +21,12 @@ export interface RTParticipant {
   updated_at?: string;
   barcode?: string;
 }
+
+export interface RTCertificateClaim {
+  id?: string;
+  created_at?: string;
+  nama_lengkap: string;
+  no_whatsapp: string;
+  jenis_kelamin: string;
+  wa_pembeli_utama: string;
+}

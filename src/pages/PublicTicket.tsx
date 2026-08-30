@@ -327,6 +327,7 @@ const PublicTicket: React.FC = () => {
                     <li><span className="badge-reguler">REGULER</span> <strong>110.000</strong></li>
                     <li><span className="badge-silver">SILVER</span> <strong>150.000</strong></li>
                     <li><span className="badge-gold">GOLD</span> <strong>200.000</strong></li>
+                    <li><span className="badge-vvip" style={{backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa'}}>VIP</span> <strong>-</strong></li>
                     <li><span className="badge-vvip">VVIP</span> <strong>-</strong></li>
                   </ul>
                 </div>
@@ -382,8 +383,6 @@ const PublicTicket: React.FC = () => {
       <footer className="rt-footer no-print">
         <div className="rt-footer-logos">
           <span>MEDIA PARTNER: KendariInfo · Salasel Tarbiah</span>
-          <span>·</span>
-          <span>SPONSOR: Zahra Hotel Syariah</span>
         </div>
         <span>© 2026 Ruang Tenang · Menemukan Diri, Menata Hati, Meraih Arti</span>
       </footer>

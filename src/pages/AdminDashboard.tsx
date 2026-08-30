@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '../supabaseClient';
 import type { RTParticipant } from '../types';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { v4 as uuidv4 } from 'uuid';
 import { formatTicketCode, currency, getHarga } from '../utils';
 
@@ -268,6 +269,7 @@ const AdminDashboard: React.FC = () => {
   const searchTerm = useDebounce(searchInput, 300);
   const [activeTab, setActiveTab]       = useState<'Semua' | 'Terverifikasi' | 'Belum Lunas' | 'Sudah Hadir' | 'Belum Kirim WA' | 'Sudah Kirim WA' | 'Duplikat'>('Semua');
   const [filterTiket, setFilterTiket]   = useState('');
+  const [filterGender, setFilterGender] = useState('');
   const [sortField, setSortField]       = useState<SortField>('created_at');
   const [sortDir, setSortDir]           = useState<SortDir>('desc');
 
@@ -283,7 +285,7 @@ const AdminDashboard: React.FC = () => {
   const [currentPage, setCurrentPage]   = useState(1);
   const itemsPerPage = 20;
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, activeTab, filterTiket, sortField, sortDir]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, activeTab, filterTiket, filterGender, sortField, sortDir]);
 
   /* ── Modal state ────────────────────────────────────────────────── */
   const [importPreview, setImportPreview]       = useState<ImportPreview | null>(null);
@@ -395,30 +397,100 @@ const AdminDashboard: React.FC = () => {
   }, [fetchParticipants]);
 
   /* ── Export Excel ────────────────────────────────────────────────── */
-  const handleExportExcel = useCallback(() => {
-    const exportData = filteredSorted.map(p => ({
-      'Timestamp':          p.created_at ? new Date(p.created_at).toLocaleString('id-ID') : '',
-      'Nama Lengkap':       p.nama_lengkap,
-      'Email':              p.email,
-      'No. WhatsApp':       p.no_whatsapp,
-      'Usia':               p.usia,
-      'Jenis Kelamin':      p.jenis_kelamin,
-      'Jenis Tiket':        p.jenis_tiket,
-      'Sumber Info':        Array.isArray(p.sumber_info) ? p.sumber_info.join(', ') : p.sumber_info,
-      'Jumlah Tiket':       `${p.jumlah_tiket} Tiket`,
-      'Metode Pembayaran':  p.metode_pembayaran,
-      'Bukti Transfer URL': p.bukti_transfer_url,
-      'Tujuan Event':       p.tujuan_event,
-      'Bukti Follow IG':    p.bukti_follow_ig_url,
-      'Pernyataan Benar':   p.pernyataan_benar ? 'Ya' : 'Tidak',
-      'Status Pembayaran':  p.status_pembayaran,
-      'Jumlah Check-in':    `${p.jumlah_checkin ?? 0} / ${p.jumlah_tiket}`,
-      'Barcode':            p.barcode || '',
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Responses');
-    XLSX.writeFile(wb, 'Data_Pendaftar_Ruang_Tenang.xlsx');
+  const handleExportExcel = useCallback(async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Ruang Tenang Admin';
+    workbook.created = new Date();
+
+    const ws = workbook.addWorksheet('Responses', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+
+    ws.columns = [
+      { header: 'Timestamp', key: 'timestamp', width: 20 },
+      { header: 'Nama Lengkap', key: 'nama', width: 35 },
+      { header: 'Email', key: 'email', width: 25 },
+      { header: 'No. WhatsApp', key: 'wa', width: 20 },
+      { header: 'Usia', key: 'usia', width: 10 },
+      { header: 'Jenis Kelamin', key: 'gender', width: 15 },
+      { header: 'Jenis Tiket', key: 'tiket', width: 20 },
+      { header: 'Sumber Info', key: 'sumber', width: 30 },
+      { header: 'Jumlah Tiket', key: 'jumlahtiket', width: 15 },
+      { header: 'Metode Pembayaran', key: 'metode', width: 22 },
+      { header: 'Bukti Transfer URL', key: 'bukti', width: 40 },
+      { header: 'Tujuan Event', key: 'tujuan', width: 30 },
+      { header: 'Bukti Follow IG', key: 'ig', width: 40 },
+      { header: 'Pernyataan', key: 'pernyataan', width: 15 },
+      { header: 'Status Pembayaran', key: 'status', width: 20 },
+      { header: 'Check-in', key: 'checkin', width: 15 },
+      { header: 'Barcode', key: 'barcode', width: 20 },
+    ];
+
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4F46E5' } // Indigo color
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    filteredSorted.forEach((p) => {
+      const row = ws.addRow({
+        timestamp: p.created_at ? new Date(p.created_at).toLocaleString('id-ID') : '',
+        nama: p.nama_lengkap,
+        email: p.email,
+        wa: p.no_whatsapp,
+        usia: p.usia,
+        gender: p.jenis_kelamin,
+        tiket: p.jenis_tiket,
+        sumber: Array.isArray(p.sumber_info) ? p.sumber_info.join(', ') : p.sumber_info,
+        jumlahtiket: `${p.jumlah_tiket} Tiket`,
+        metode: p.metode_pembayaran,
+        bukti: p.bukti_transfer_url,
+        tujuan: p.tujuan_event,
+        ig: p.bukti_follow_ig_url,
+        pernyataan: p.pernyataan_benar ? 'Ya' : 'Tidak',
+        status: p.status_pembayaran,
+        checkin: `${p.jumlah_checkin ?? 0} / ${p.jumlah_tiket}`,
+        barcode: p.barcode || ''
+      });
+
+      // Alignments
+      row.getCell('usia').alignment = { horizontal: 'center' };
+      row.getCell('gender').alignment = { horizontal: 'center' };
+      row.getCell('jumlahtiket').alignment = { horizontal: 'center' };
+      row.getCell('pernyataan').alignment = { horizontal: 'center' };
+      row.getCell('status').alignment = { horizontal: 'center' };
+      row.getCell('checkin').alignment = { horizontal: 'center' };
+      row.getCell('barcode').alignment = { horizontal: 'center' };
+
+      if (p.status_pembayaran === 'Lunas') {
+        row.getCell('status').font = { color: { argb: 'FF10B981' }, bold: true };
+      } else {
+        row.getCell('status').font = { color: { argb: 'FFF59E0B' }, bold: true };
+      }
+    });
+
+    ws.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+          left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+          bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+          right: { style: 'thin', color: { argb: 'FFDDDDDD' } }
+        };
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Data_Pendaftar_Ruang_Tenang.xlsx';
+    a.click();
+    window.URL.revokeObjectURL(url);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants, searchTerm, activeTab, filterTiket, sortField, sortDir]);
 
@@ -559,7 +631,7 @@ const AdminDashboard: React.FC = () => {
         String(extP.no_whatsapp || '').replace(/\D/g, '') === String(newP.no_whatsapp || '').replace(/\D/g, '')
       );
 
-      const validTypes = ['Silver', 'Gold', 'Reguler', 'VVIP'];
+      const validTypes = ['Silver', 'Gold', 'Reguler', 'VVIP', 'VIP'];
       const newJenisTiket = normalizeJenis(newP.jenis_tiket || '');
       const isValidType = validTypes.includes(newJenisTiket);
 
@@ -620,8 +692,16 @@ const AdminDashboard: React.FC = () => {
       }
     });
 
-    // Jika setelah di-filter ternyata tidak ada yang baru / diupdate sama sekali
-    if (upsertPayload.length === 0) {
+    // Mencegah error ON CONFLICT DO UPDATE dengan menghapus data duplikat di dalam batch payload itu sendiri
+    const payloadMap = new Map<string, Partial<RTParticipant>>();
+    upsertPayload.forEach(p => {
+       const cleanWA = String(p.no_whatsapp || '').replace(/\D/g, '');
+       const key = p.id ? `id_${p.id}` : `new_${cleanWA}_${p.jenis_tiket}`;
+       payloadMap.set(key, p);
+    });
+    const finalUpsertPayload = Array.from(payloadMap.values());
+
+    if (finalUpsertPayload.length === 0) {
       setImportPreview(null);
       setImportLoading(false);
       setSummaryTab('dilewati');
@@ -633,7 +713,7 @@ const AdminDashboard: React.FC = () => {
       return;
     }
 
-    const { error } = await supabase.from(import.meta.env.VITE_TABLE_NAME || 'rt_participants').upsert(upsertPayload);
+    const { error } = await supabase.from(import.meta.env.VITE_TABLE_NAME || 'rt_participants').upsert(finalUpsertPayload);
     
     if (error) { setImportError(`Gagal import: ${error.message}`); }
     else { 
@@ -737,7 +817,19 @@ const AdminDashboard: React.FC = () => {
         if (activeTab === 'Duplikat') matchTab = isDuplicate(p);
 
         const matchTiket  = !filterTiket || normalizeJenis(p.jenis_tiket || '') === filterTiket;
-        return matchSearch && matchTab && matchTiket;
+
+        // Gender matching robust check
+        let matchGender = true;
+        if (filterGender) {
+          const pGender = p.jenis_kelamin?.trim().toUpperCase() || '';
+          if (filterGender === 'L') {
+            matchGender = pGender.startsWith('L'); // L, LAKI-LAKI, dll
+          } else if (filterGender === 'P') {
+            matchGender = pGender.startsWith('P'); // P, PEREMPUAN, dll
+          }
+        }
+
+        return matchSearch && matchTab && matchTiket && matchGender;
       })
       .sort((a, b) => {
         let cmp = 0;
@@ -751,7 +843,7 @@ const AdminDashboard: React.FC = () => {
         return sortDir === 'asc' ? cmp : -cmp;
       })
       .map(({ p }) => p);
-  }, [participants, searchTerm, activeTab, filterTiket, sortField, sortDir]);
+  }, [participants, searchTerm, activeTab, filterTiket, filterGender, sortField, sortDir]);
 
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -1023,6 +1115,16 @@ const AdminDashboard: React.FC = () => {
           >
             <option value="" className="bg-[#1a1535]">Semua Kategori Tiket</option>
             {jenisTiketList.map(j => <option key={j} value={j} className="bg-[#1a1535]">{j}</option>)}
+          </select>
+          <select
+            value={filterGender}
+            onChange={e => setFilterGender(e.target.value)}
+            className="px-3 py-2 rounded-xl text-sm font-medium text-white/70 border border-white/10 outline-none focus:border-violet-500 transition cursor-pointer w-fit"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          >
+            <option value="" className="bg-[#1a1535]">Semua Gender</option>
+            <option value="L" className="bg-[#1a1535]">Laki-laki</option>
+            <option value="P" className="bg-[#1a1535]">Perempuan</option>
           </select>
         </div>
 
@@ -1459,6 +1561,7 @@ const AdminDashboard: React.FC = () => {
                       <option value="Silver 150K">Silver (Rp150.000)</option>
                       <option value="Gold 200K">Gold (Rp200.000)</option>
                       <option value="VVIP">VVIP</option>
+                      <option value="VIP">VIP</option>
                     </select>
                 </div>
                 <div>

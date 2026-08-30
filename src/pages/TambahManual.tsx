@@ -254,6 +254,7 @@ const TambahManual: React.FC = () => {
                 <option value="Silver 150K">Silver (Rp150.000)</option>
                 <option value="Gold 200K">Gold (Rp200.000)</option>
                 <option value="VVIP">VVIP</option>
+                <option value="VIP">VIP</option>
               </select>
             </Field>
             <Field label="Jumlah Tiket">

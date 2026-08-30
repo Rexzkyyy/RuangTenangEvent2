@@ -11,7 +11,7 @@ const Scanner        = React.lazy(() => import('./pages/Scanner'));
 const Login          = React.lazy(() => import('./pages/Login'));
 const PublicTicket   = React.lazy(() => import('./pages/PublicTicket'));
 const TambahManual   = React.lazy(() => import('./pages/TambahManual'));
-
+const KlaimSertifikat= React.lazy(() => import('./pages/KlaimSertifikat'));
 /* ── Full-screen loading fallback ────────────────────────── */
 const PageLoader: React.FC = () => (
   <div
@@ -38,6 +38,9 @@ const App: React.FC = () => {
 
           {/* Halaman Tiket Publik (publik, tidak perlu login) */}
           <Route path="/t/:id" element={<PublicTicket />} />
+
+          {/* Halaman Klaim Sertifikat (publik) */}
+          <Route path="/klaim-sertifikat" element={<KlaimSertifikat />} />
 
           {/* ── Protected Routes (wajib login) — semua pakai AppLayout ── */}
           <Route
