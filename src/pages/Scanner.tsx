@@ -97,11 +97,10 @@ const Scanner: React.FC = () => {
           (p.barcode && p.barcode.toLowerCase().startsWith(cleanText))
         );
 
-        // 3. Fallback: Search by WhatsApp or Name
+        // 3. Fallback: Exact match by WhatsApp
         if (!data) {
           data = allData.find(p => 
-            (p.no_whatsapp && p.no_whatsapp.includes(text)) || 
-            (p.nama_lengkap && p.nama_lengkap.toLowerCase().includes(text.toLowerCase()))
+            (p.no_whatsapp && p.no_whatsapp === text)
           );
         }
       }
@@ -526,12 +525,20 @@ const Scanner: React.FC = () => {
                 onBlur={(e) => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
               />
 
-              {suggestions.length > 0 && (
+              {allParticipants.length === 0 ? (
+                <div style={{ color: '#a5b4fc', fontSize: '0.85rem', marginBottom: '16px', textAlign: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '10px' }}>
+                  ⏳ Memuat database peserta...
+                </div>
+              ) : manualBarcode.trim().length >= 2 && suggestions.length === 0 ? (
+                <div style={{ color: '#fca5a5', fontSize: '0.85rem', marginBottom: '16px', textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: '10px', borderRadius: '10px' }}>
+                  ❌ Tidak ada nama / WA / Kode yang cocok
+                </div>
+              ) : suggestions.length > 0 ? (
                 <div style={{
                   background: 'rgba(0,0,0,0.2)', borderRadius: '12px',
                   marginBottom: '20px', overflowY: 'auto',
                   border: '1px solid rgba(255,255,255,0.05)',
-                  flexShrink: 1
+                  maxHeight: '220px', flexShrink: 0
                 }}>
                   {suggestions.map((p, index) => (
                     <div
@@ -554,7 +561,7 @@ const Scanner: React.FC = () => {
                     </div>
                   ))}
                 </div>
-              )}
+              ) : null}
 
               <button
                 onClick={handleManualSubmit}
