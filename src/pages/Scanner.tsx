@@ -546,7 +546,7 @@ const Scanner: React.FC = () => {
                       onClick={() => {
                         setShowManualInput(false);
                         setManualBarcode('');
-                        processBarcode(p.barcode || p.id);
+                        processBarcode(p.barcode || p.id || '');
                       }}
                       style={{
                         padding: '12px 16px', borderBottom: index < suggestions.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
