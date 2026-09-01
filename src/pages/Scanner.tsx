@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { ArrowLeft, Camera, CheckCircle2, XCircle, Image as ImageIcon, RefreshCcw, Keyboard, AlertTriangle } from 'lucide-react';
@@ -27,6 +27,7 @@ const Scanner: React.FC = () => {
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [allParticipants, setAllParticipants] = useState<RTParticipant[]>([]);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +36,32 @@ const Scanner: React.FC = () => {
   const isProcessingRef = useRef(false);
   const lastScanTimestamp = useRef(0);
   const SCAN_DEBOUNCE_MS = 2000;
+
+  useEffect(() => {
+    if (showManualInput && allParticipants.length === 0) {
+      const fetchParticipants = async () => {
+        const { data } = await supabase
+          .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+          .select('*');
+        if (data) {
+          setAllParticipants(data);
+        }
+      };
+      fetchParticipants();
+    }
+  }, [showManualInput, allParticipants.length]);
+
+  const suggestions = useMemo(() => {
+    const query = manualBarcode.trim().toLowerCase();
+    if (!query || query.length < 2) return [];
+    
+    return allParticipants.filter(p => 
+      (p.nama_lengkap && p.nama_lengkap.toLowerCase().includes(query)) ||
+      (p.no_whatsapp && p.no_whatsapp.includes(query)) ||
+      (p.barcode && p.barcode.toLowerCase().includes(query)) ||
+      (p.id && p.id.toLowerCase().includes(query))
+    ).slice(0, 5);
+  }, [manualBarcode, allParticipants]);
 
   const processBarcode = useCallback(async (decodedText: string) => {
     const now = Date.now();
@@ -452,20 +479,24 @@ const Scanner: React.FC = () => {
             style={{
               position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
               backdropFilter: 'blur(8px)', zIndex: 50,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
-              padding: '0 0 env(safe-area-inset-bottom, 0)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+              padding: '60px 20px env(safe-area-inset-bottom, 20px)',
             }}
           >
             <div style={{
-              background: '#1e1b4b', padding: '28px 24px 32px', borderRadius: '24px 24px 0 0',
+              background: '#1e1b4b', padding: '24px', borderRadius: '24px',
               width: '100%', maxWidth: '480px',
-              boxShadow: '0 -10px 40px rgba(0,0,0,0.3)',
-              animation: 'slideUp 0.25s ease',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              animation: 'slideDown 0.25s ease',
+              display: 'flex', flexDirection: 'column',
+              maxHeight: '80vh',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'white', fontWeight: 700 }}>Pencarian Tiket Manual</h3>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#a5b4fc' }}>Ketik Kode (PY-xxx), No WA, atau Nama</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#a5b4fc' }}>Ketik Kode, No WA, atau Nama</p>
                 </div>
                 <button
                   onClick={() => setShowManualInput(false)}
@@ -485,14 +516,45 @@ const Scanner: React.FC = () => {
                 style={{
                   width: '100%', padding: '16px 18px', borderRadius: '14px',
                   border: '2px solid rgba(255,255,255,0.1)', fontSize: '1.05rem',
-                  marginBottom: '16px', outline: 'none', boxSizing: 'border-box',
+                  marginBottom: suggestions.length > 0 ? '12px' : '20px', outline: 'none', boxSizing: 'border-box',
                   background: 'rgba(0,0,0,0.2)', color: 'white',
                   fontFamily: 'inherit', letterSpacing: '0.5px',
                   transition: 'border-color 0.2s',
+                  flexShrink: 0
                 }}
                 onFocus={(e) => (e.target.style.borderColor = '#8b5cf6')}
                 onBlur={(e) => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
               />
+
+              {suggestions.length > 0 && (
+                <div style={{
+                  background: 'rgba(0,0,0,0.2)', borderRadius: '12px',
+                  marginBottom: '20px', overflowY: 'auto',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  flexShrink: 1
+                }}>
+                  {suggestions.map((p, index) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setShowManualInput(false);
+                        setManualBarcode('');
+                        processBarcode(p.barcode || p.id);
+                      }}
+                      style={{
+                        padding: '12px 16px', borderBottom: index < suggestions.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                        cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem' }}>{p.nama_lengkap}</span>
+                      <span style={{ color: '#a5b4fc', fontSize: '0.8rem', marginTop: '2px' }}>{p.no_whatsapp} • {p.jenis_tiket}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <button
                 onClick={handleManualSubmit}
@@ -505,6 +567,7 @@ const Scanner: React.FC = () => {
                   fontSize: '1.05rem', fontWeight: 700, cursor: manualBarcode.trim() ? 'pointer' : 'not-allowed',
                   transition: 'all 0.2s',
                   boxShadow: manualBarcode.trim() ? '0 6px 20px rgba(124,58,237,0.35)' : 'none',
+                  flexShrink: 0
                 }}
               >
                 {isProcessing ? 'Memproses...' : 'Cek Tiket'}
@@ -669,6 +732,7 @@ const Scanner: React.FC = () => {
       <style>{`
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
         @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         #reader > div { border: none !important; box-shadow: none !important; }
         #reader video { object-fit: cover !important; }
         #reader__scan_region { min-height: 0 !important; }
