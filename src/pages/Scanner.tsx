@@ -382,7 +382,11 @@ const Scanner: React.FC = () => {
       const fileScanner = new Html5Qrcode('reader-file-scan', { formatsToSupport: SUPPORTED_FORMATS, verbose: false });
       let decodedText = '';
       try {
-        decodedText = await fileScanner.scanFile(file, false);
+        const scanPromise = fileScanner.scanFile(file, false);
+        const timeoutPromise = new Promise<string>((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout memindai gambar')), 2500)
+        );
+        decodedText = await Promise.race([scanPromise, timeoutPromise]);
       } catch (err) {
         throw new Error('Barcode tidak terdeteksi');
       } finally {
