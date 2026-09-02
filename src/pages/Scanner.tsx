@@ -12,8 +12,9 @@ type ScanResult = {
   participant?: RTParticipant;
 } | null;
 
+// Only CODE_128 — matching the ticket barcode format exactly.
+// Fewer formats = faster decoding per frame.
 const SUPPORTED_FORMATS = [
-  Html5QrcodeSupportedFormats.QR_CODE,
   Html5QrcodeSupportedFormats.CODE_128,
 ];
 
@@ -212,9 +213,13 @@ const Scanner: React.FC = () => {
 
     try {
       await scannerRef.current.start(
-        { facingMode: 'environment' },
+        { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        } as MediaTrackConstraints,
         {
-          fps: 30,
+          fps: 15,
           qrbox: { width: qrboxWidth, height: qrboxHeight },
           aspectRatio: window.innerHeight / window.innerWidth,
           disableFlip: true,
