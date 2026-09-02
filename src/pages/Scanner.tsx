@@ -12,12 +12,13 @@ type ScanResult = {
   participant?: RTParticipant;
 } | null;
 
-// Only CODE_128 — matching the ticket barcode format exactly.
-// Fewer formats = faster decoding per frame.
 const SUPPORTED_FORMATS = [
+  Html5QrcodeSupportedFormats.QR_CODE,
   Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
 ];
-
 const Scanner: React.FC = () => {
   const navigate = useNavigate();
   const [scanResult, setScanResult] = useState<ScanResult>(null);
@@ -204,9 +205,8 @@ const Scanner: React.FC = () => {
     isProcessingRef.current = false;
     lastScanTimestamp.current = 0;
 
-    const qrboxWidth = Math.floor(window.innerWidth * 0.65);
-    // Semi-portrait ratio for comfortable scanning
-    const qrboxHeight = Math.floor(qrboxWidth * 0.5);
+    const minDim = Math.min(window.innerWidth, window.innerHeight);
+    const qrboxSize = Math.min(Math.floor(minDim * 0.8), 380);
 
     const onScan = (decodedText: string) => processBarcode(decodedText);
 
@@ -215,7 +215,7 @@ const Scanner: React.FC = () => {
         { facingMode: 'environment' },
         {
           fps: 20,
-          qrbox: { width: qrboxWidth, height: qrboxHeight },
+          qrbox: { width: qrboxSize, height: qrboxSize },
           aspectRatio: window.innerHeight / window.innerWidth,
           disableFlip: true,
         },
