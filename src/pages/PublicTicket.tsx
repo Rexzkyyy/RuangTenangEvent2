@@ -310,11 +310,12 @@ const PublicTicket: React.FC = () => {
               <Barcode
                 value={formatTicketCode(getBarcodeValue())}
                 format="CODE128"
-                width={2.2}
-                height={65}
+                width={3}
+                height={90}
                 displayValue={false}
-                background="transparent"
-                lineColor="#1F2937"
+                background="#ffffff"
+                lineColor="#000000"
+                margin={10}
                 renderer="img"
               />
               <div className="rt-barcode-value">{formatTicketCode(getBarcodeValue())}</div>

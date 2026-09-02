@@ -204,9 +204,9 @@ const Scanner: React.FC = () => {
     lastScanTimestamp.current = 0;
 
     const minDim = Math.min(window.innerWidth, window.innerHeight);
-    const qrboxWidth = Math.min(Math.floor(minDim * 0.6), 280);
-    // Horizontal rectangle for 1D barcode scanning
-    const qrboxHeight = Math.floor(qrboxWidth * 0.45);
+    const qrboxWidth = Math.min(Math.floor(minDim * 0.75), 350);
+    // Wide thin rectangle — optimal for 1D barcode scanning
+    const qrboxHeight = Math.floor(qrboxWidth * 0.35);
 
     const onScan = (decodedText: string) => processBarcode(decodedText);
 
