@@ -218,7 +218,7 @@ const Scanner: React.FC = () => {
         { 
           facingMode: 'environment',
           advanced: [{ focusMode: 'continuous' }] 
-        },
+        } as any,
         {
           fps: 30,
           qrbox: { width: qrboxWidth, height: qrboxHeight },
