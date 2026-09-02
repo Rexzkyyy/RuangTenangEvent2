@@ -207,7 +207,7 @@ const Scanner: React.FC = () => {
     lastScanTimestamp.current = 0;
 
     const minDim = Math.min(window.innerWidth, window.innerHeight);
-    const qrboxWidth = Math.min(Math.floor(minDim * 0.8), 380);
+    const qrboxWidth = Math.min(Math.floor(minDim * 0.65), 320);
     // Horizontal rectangle for 1D barcode scanning
     const qrboxHeight = Math.floor(qrboxWidth * 0.45);
 
@@ -215,12 +215,15 @@ const Scanner: React.FC = () => {
 
     try {
       await scannerRef.current.start(
-        { facingMode: 'environment' },
+        { 
+          facingMode: 'environment',
+          advanced: [{ focusMode: 'continuous' }] 
+        },
         {
-          fps: 15,
+          fps: 30,
           qrbox: { width: qrboxWidth, height: qrboxHeight },
           aspectRatio: window.innerHeight / window.innerWidth,
-          disableFlip: false,
+          disableFlip: true,
         },
         onScan,
         () => {}
@@ -231,7 +234,7 @@ const Scanner: React.FC = () => {
         if (devices && devices.length > 0) {
           await scannerRef.current.start(
             devices[devices.length - 1].id,
-            { fps: 15, qrbox: { width: qrboxWidth, height: qrboxHeight } },
+            { fps: 30, qrbox: { width: qrboxWidth, height: qrboxHeight }, disableFlip: true },
             onScan,
             () => {}
           );
