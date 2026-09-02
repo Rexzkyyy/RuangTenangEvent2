@@ -215,11 +215,11 @@ const Scanner: React.FC = () => {
       await scannerRef.current.start(
         { 
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         } as MediaTrackConstraints,
         {
-          fps: 15,
+          fps: 20,
           qrbox: { width: qrboxWidth, height: qrboxHeight },
           aspectRatio: window.innerHeight / window.innerWidth,
           disableFlip: true,
@@ -227,13 +227,25 @@ const Scanner: React.FC = () => {
         onScan,
         () => {}
       );
+
+      // Enable continuous autofocus if supported by the device
+      try {
+        const videoEl = document.querySelector('#reader video') as HTMLVideoElement;
+        if (videoEl?.srcObject) {
+          const track = (videoEl.srcObject as MediaStream).getVideoTracks()[0];
+          const capabilities = track.getCapabilities?.() as any;
+          if (capabilities?.focusMode?.includes('continuous')) {
+            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] } as any);
+          }
+        }
+      } catch (_) { /* autofocus not supported, silently ignore */ }
     } catch (err) {
       try {
         const devices = await Html5Qrcode.getCameras();
         if (devices && devices.length > 0) {
           await scannerRef.current.start(
             devices[devices.length - 1].id,
-            { fps: 30, qrbox: { width: qrboxWidth, height: qrboxHeight }, disableFlip: true },
+            { fps: 20, qrbox: { width: qrboxWidth, height: qrboxHeight }, disableFlip: true },
             onScan,
             () => {}
           );
