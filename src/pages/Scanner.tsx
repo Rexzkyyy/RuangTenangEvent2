@@ -215,10 +215,7 @@ const Scanner: React.FC = () => {
 
     try {
       await scannerRef.current.start(
-        { 
-          facingMode: 'environment',
-          advanced: [{ focusMode: 'continuous' }] 
-        } as any,
+        { facingMode: 'environment' },
         {
           fps: 30,
           qrbox: { width: qrboxWidth, height: qrboxHeight },
