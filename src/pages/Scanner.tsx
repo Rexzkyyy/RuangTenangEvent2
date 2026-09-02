@@ -213,11 +213,7 @@ const Scanner: React.FC = () => {
 
     try {
       await scannerRef.current.start(
-        { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        } as MediaTrackConstraints,
+        { facingMode: 'environment' },
         {
           fps: 20,
           qrbox: { width: qrboxWidth, height: qrboxHeight },
