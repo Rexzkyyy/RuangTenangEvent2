@@ -13,11 +13,7 @@ type ScanResult = {
 } | null;
 
 const SUPPORTED_FORMATS = [
-  Html5QrcodeSupportedFormats.QR_CODE,
   Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
 ];
 const Scanner: React.FC = () => {
   const navigate = useNavigate();
@@ -240,7 +236,7 @@ const Scanner: React.FC = () => {
         if (devices && devices.length > 0) {
           await scannerRef.current.start(
             devices[devices.length - 1].id,
-            { fps: 20, qrbox: { width: qrboxWidth, height: qrboxHeight }, disableFlip: true },
+            { fps: 20, qrbox: { width: qrboxSize, height: qrboxSize }, disableFlip: true },
             onScan,
             () => {}
           );
