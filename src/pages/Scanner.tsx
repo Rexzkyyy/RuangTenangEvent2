@@ -36,20 +36,22 @@ const Scanner: React.FC = () => {
   const isProcessingRef = useRef(false);
   const lastScanTimestamp = useRef(0);
   const SCAN_DEBOUNCE_MS = 2000;
+  const allParticipantsRef = useRef<RTParticipant[]>([]);
+
+  const fetchAllParticipants = async () => {
+    const { data } = await supabase
+      .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+      .select('*');
+    if (data) {
+      setAllParticipants(data);
+      allParticipantsRef.current = data;
+    }
+    return data || [];
+  };
 
   useEffect(() => {
-    if (showManualInput && allParticipants.length === 0) {
-      const fetchParticipants = async () => {
-        const { data } = await supabase
-          .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-          .select('*');
-        if (data) {
-          setAllParticipants(data);
-        }
-      };
-      fetchParticipants();
-    }
-  }, [showManualInput, allParticipants.length]);
+    fetchAllParticipants();
+  }, []);
 
   const suggestions = useMemo(() => {
     const query = manualBarcode.trim().toLowerCase();
@@ -83,33 +85,36 @@ const Scanner: React.FC = () => {
       const text = decodedText.trim();
       const cleanText = text.replace(/^PY-/i, '').toLowerCase();
       
-      let data = null;
+      let matched = allParticipantsRef.current.find(p => 
+        (p.id && p.id.toLowerCase().startsWith(cleanText)) || 
+        (p.barcode && p.barcode.toLowerCase().startsWith(cleanText)) ||
+        (p.no_whatsapp && p.no_whatsapp === text)
+      );
 
-      // 1. Fetch all data for robust client-side searching (avoids UUID cast errors in Supabase)
-      const { data: allData } = await supabase
-        .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
-        .select('*');
-
-      if (allData) {
-        // 2. Exact match on UUID or startswith on Short ID (e.g. PY-101EFE3C -> 101efe3c)
-        data = allData.find(p => 
+      // Refresh cache if not found (in case of new registrations)
+      if (!matched) {
+        const freshData = await fetchAllParticipants();
+        matched = freshData.find(p => 
           (p.id && p.id.toLowerCase().startsWith(cleanText)) || 
-          (p.barcode && p.barcode.toLowerCase().startsWith(cleanText))
+          (p.barcode && p.barcode.toLowerCase().startsWith(cleanText)) ||
+          (p.no_whatsapp && p.no_whatsapp === text)
         );
-
-        // 3. Fallback: Exact match by WhatsApp
-        if (!data) {
-          data = allData.find(p => 
-            (p.no_whatsapp && p.no_whatsapp === text)
-          );
-        }
       }
 
-      if (!data) {
+      if (!matched) {
         setScanResult({ success: false, message: 'Tiket Tidak Valid / Tidak Ditemukan!', type: 'error' });
+        return;
       }
 
-      // Only continue processing if we found valid data
+      // Fetch latest data for this specific participant
+      const { data: latestParticipantData } = await supabase
+        .from(import.meta.env.VITE_TABLE_NAME || 'rt_participants')
+        .select('*')
+        .eq('id', matched.id)
+        .single();
+        
+      const data = latestParticipantData || matched;
+
       if (data) {
         // -- AUTO APPROVE LOGIC --
         const whatsapp = data.no_whatsapp || '';

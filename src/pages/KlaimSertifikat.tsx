@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Download, CheckCircle2, AlertCircle, Gift, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { RTParticipant, RTCertificateClaim } from '../types';
-import * as htmlToImage from 'html-to-image';
+import { jsPDF } from 'jspdf';
 
 const KlaimSertifikat: React.FC = () => {
   const [step, setStep] = useState<1 | 2 | 3>(1); // 1: Cek WA, 2: Isi Form, 3: Download Sertifikat
@@ -36,7 +36,7 @@ const KlaimSertifikat: React.FC = () => {
     if (containerRef.current) {
       const observer = new ResizeObserver((entries) => {
         if (entries[0] && entries[0].contentRect.width > 0) {
-          setCertScale(entries[0].contentRect.width / 800);
+          setCertScale(entries[0].contentRect.width / 1600);
         }
       });
       observer.observe(containerRef.current);
@@ -132,18 +132,98 @@ const KlaimSertifikat: React.FC = () => {
     }
   };
 
-  const downloadCertificate = async () => {
-    if (!certRef.current || !generatedClaim) return;
+  const generateCertificateCanvas = async () => {
+    if (!generatedClaim) return null;
     
+    await document.fonts.load('400 120px "Great Vibes"');
+    
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = '/Serti_fix.png';
+
+    const stampImg = new Image();
+    stampImg.crossOrigin = 'anonymous';
+    stampImg.src = '/Logo_HD_RT.jpg';
+
+    await Promise.all([
+      new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; }),
+      new Promise((resolve, reject) => { stampImg.onload = resolve; stampImg.onerror = reject; })
+    ]);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    
+    if (ctx) {
+      ctx.drawImage(img, 0, 0);
+      
+      // Draw Stamp
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 0.5; // Transparansi efek stempel
+      
+      const stampSize = 260;
+      const stampX = (canvas.width / 2) - 130; // Digeser ke kiri agar tidak menutupi full tanda tangan
+      const stampY = 870; // Digeser sedikit ke atas
+      
+      ctx.translate(stampX, stampY);
+      ctx.rotate(-12 * Math.PI / 180); // Rotasi miring sedikit seperti stempel asli
+      ctx.drawImage(stampImg, -stampSize / 2, -stampSize / 2, stampSize, stampSize);
+      ctx.restore();
+      
+      ctx.font = '400 120px "Great Vibes", cursive';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      const x = canvas.width / 2;
+      const y = canvas.height * 0.37; // Posisikan di atas tulisan "sebagai" (sekitar 37% dari atas)
+      
+      ctx.fillText(generatedClaim.nama_lengkap, x, y);
+      return canvas;
+    }
+    return null;
+  };
+
+  const downloadCertificatePNG = async () => {
+    if (!generatedClaim) return;
     setIsDownloading(true);
     try {
-      const dataUrl = await htmlToImage.toPng(certRef.current, { quality: 1, pixelRatio: 2 });
-      const link = document.createElement('a');
-      link.download = `Sertifikat-${generatedClaim.nama_lengkap.replace(/\s+/g, '-')}.png`;
-      link.href = dataUrl;
-      link.click();
+      const canvas = await generateCertificateCanvas();
+      if (canvas) {
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `Sertifikat-${generatedClaim.nama_lengkap.replace(/\s+/g, '-')}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
     } catch (err) {
-      alert('Gagal mengunduh sertifikat.');
+      console.error(err);
+      alert('Gagal mengunduh sertifikat PNG.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const downloadCertificatePDF = async () => {
+    if (!generatedClaim) return;
+    setIsDownloading(true);
+    try {
+      const canvas = await generateCertificateCanvas();
+      if (canvas) {
+        const dataUrl = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "px",
+          format: [canvas.width, canvas.height]
+        });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`Sertifikat-${generatedClaim.nama_lengkap.replace(/\s+/g, '-')}.pdf`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengunduh sertifikat PDF.');
     } finally {
       setIsDownloading(false);
     }
@@ -354,63 +434,84 @@ const KlaimSertifikat: React.FC = () => {
                   <div 
                     ref={containerRef}
                     className="relative mx-auto rounded-lg overflow-hidden shadow-2xl shadow-indigo-500/20 border border-white/10" 
-                    style={{ width: '100%', maxWidth: '350px', aspectRatio: '800/565' }}
+                    style={{ width: '100%', maxWidth: '500px', aspectRatio: '1600/1131' }}
                   >
                     <div 
                       ref={certRef}
-                      className="absolute top-0 left-0 bg-[#0a0a0a] flex flex-col items-center justify-center p-6 text-center border-[8px] border-indigo-900/40"
+                      className="absolute top-0 left-0 bg-white flex flex-col items-center justify-center text-center"
                       style={{ 
-                        background: 'linear-gradient(135deg, #0d0b1f 0%, #1e1b4b 100%)',
-                        width: '800px', // Fixed large width for high-res output
-                        height: '565px',
-                        transform: `scale(${certScale})`, // Scale dinamis dihitung dari ResizeObserver
+                        backgroundImage: 'url(/Serti_fix.png)',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        width: '1600px',
+                        height: '1131px',
+                        transform: `scale(${certScale})`, 
                         transformOrigin: 'top left'
                       }}
                     >
-                      {/* Decorative corners */}
-                      <div className="absolute top-4 left-4 w-12 h-12 border-t-2 border-l-2 border-indigo-400/50"></div>
-                      <div className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 border-indigo-400/50"></div>
-                      <div className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 border-indigo-400/50"></div>
-                      <div className="absolute bottom-4 right-4 w-12 h-12 border-b-2 border-r-2 border-indigo-400/50"></div>
+                      <h2 
+                        style={{ 
+                          fontFamily: '"Great Vibes", cursive', 
+                          fontSize: '120px', 
+                          color: '#000000',
+                          position: 'absolute',
+                          top: '37%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          width: '100%',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {generatedClaim.nama_lengkap}
+                      </h2>
                       
-                      <h4 className="text-indigo-400 font-serif italic text-2xl tracking-widest uppercase mb-2">Certificate of Attendance</h4>
-                      <h1 className="text-5xl font-bold text-white mb-8 tracking-tight">RUANG TENANG</h1>
-                      
-                      <p className="text-white/70 text-xl mb-4 italic">This is to certify that</p>
-                      <div className="w-4/5 border-b border-indigo-500/50 pb-2 mb-6 mx-auto">
-                        <h2 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-yellow-500" style={{ fontFamily: 'Georgia, serif' }}>
-                          {generatedClaim.nama_lengkap}
-                        </h2>
-                      </div>
-                      <p className="text-white/60 text-lg px-12 leading-relaxed">
-                        has actively participated in the Ruang Tenang Event, demonstrating great enthusiasm and commitment to self-growth.
-                      </p>
-                      
-                      <div className="absolute bottom-10 flex justify-between w-full px-20">
-                        <div className="text-center">
-                          <div className="w-32 border-b border-white/30 mb-2"></div>
-                          <p className="text-white/50 text-sm">Event Organizer</p>
-                        </div>
-                        <div className="text-center">
-                          <div className="w-32 border-b border-white/30 mb-2"></div>
-                          <p className="text-white/50 text-sm">Sponsor / Partner</p>
-                        </div>
-                      </div>
+                      {/* Stamp Overlay */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          left: 'calc(50% - 130px)',
+                          top: '870px',
+                          backgroundImage: 'url(/Logo_HD_RT.jpg)',
+                          backgroundSize: 'contain',
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'center',
+                          opacity: 0.5,
+                          mixBlendMode: 'multiply',
+                          transform: 'translate(-50%, -50%) rotate(-12deg)',
+                          pointerEvents: 'none',
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
 
-                <button 
-                  onClick={downloadCertificate}
-                  disabled={isDownloading}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-indigo-600 text-white font-medium text-[15px] hover:bg-indigo-700 transition-all disabled:opacity-70"
-                >
-                  {isDownloading ? (
-                    <><Loader2 size={18} className="animate-spin" /> Sedang Mengunduh...</>
-                  ) : (
-                    <><Download size={18} /> Download E-Sertifikat (PNG)</>
-                  )}
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                  <button 
+                    onClick={downloadCertificatePNG}
+                    disabled={isDownloading}
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-white/10 text-white font-medium text-[15px] hover:bg-white/20 transition-all disabled:opacity-70 border border-white/10"
+                  >
+                    {isDownloading ? (
+                      <><Loader2 size={18} className="animate-spin" /> ...</>
+                    ) : (
+                      <><Download size={18} /> Download PNG</>
+                    )}
+                  </button>
+
+                  <button 
+                    onClick={downloadCertificatePDF}
+                    disabled={isDownloading}
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-indigo-600 text-white font-medium text-[15px] hover:bg-indigo-700 transition-all disabled:opacity-70 shadow-lg shadow-indigo-500/25"
+                  >
+                    {isDownloading ? (
+                      <><Loader2 size={18} className="animate-spin" /> ...</>
+                    ) : (
+                      <><Download size={18} /> Download PDF</>
+                    )}
+                  </button>
+                </div>
               </>
 
             <button 
