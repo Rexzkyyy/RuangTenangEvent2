@@ -350,6 +350,61 @@ const Scanner: React.FC = () => {
     processBarcode(code);
   };
 
+  const captureAndScan = async () => {
+    if (isProcessingRef.current) return;
+    
+    try {
+      const videoEl = document.querySelector('#reader video') as HTMLVideoElement;
+      if (!videoEl || !videoEl.videoWidth) {
+        setScanResult({ success: false, message: 'Kamera belum siap, tunggu sebentar.', type: 'error' });
+        return;
+      }
+      
+      setIsProcessing(true);
+      isProcessingRef.current = true;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('No canvas context');
+      
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 1.0));
+      if (!blob) throw new Error('Blob creation failed');
+      
+      const file = new File([blob], "snapshot.jpg", { type: "image/jpeg" });
+      
+      // Pause camera slightly to give "shutter" feel and stop auto scan from interfering
+      try { scannerRef.current?.pause(true); } catch (_) {}
+      
+      const fileScanner = new Html5Qrcode('reader-file-scan', { formatsToSupport: SUPPORTED_FORMATS, verbose: false });
+      let decodedText = '';
+      try {
+        decodedText = await fileScanner.scanFile(file, false);
+      } catch (err) {
+        throw new Error('Barcode tidak terdeteksi');
+      } finally {
+        try { fileScanner.clear(); } catch (_) {}
+      }
+      
+      await processBarcode(decodedText);
+      
+    } catch (err) {
+      console.error("Snapshot scan error:", err);
+      setScanResult({ success: false, message: 'Gagal memindai. Jauhkan sedikit HP agar kamera fokus, lalu jepret lagi!', type: 'error' });
+      setIsProcessing(false);
+      isProcessingRef.current = false;
+      // Restart camera if no result is showing
+      try {
+        const state = scannerRef.current?.getState();
+        if (state === 3) scannerRef.current!.resume();
+        else if (state !== 2) startCamera();
+      } catch (_) {}
+    }
+  };
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-[#0d0b1f] font-sans">
       {/* Header */}
@@ -447,9 +502,27 @@ const Scanner: React.FC = () => {
                 border: '1px solid rgba(255,255,255,0.15)', padding: '8px 18px',
                 borderRadius: '50px', backdropFilter: 'blur(5px)',
                 fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem',
+                marginBottom: '4px'
               }}
             >
               <RefreshCcw size={15} /> Restart Kamera
+            </button>
+
+            {/* SHUTTER BUTTON */}
+            <button
+              onClick={captureAndScan}
+              disabled={isProcessing}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white',
+                border: 'none', padding: '16px 32px', borderRadius: '50px',
+                fontWeight: 700, cursor: 'pointer', fontSize: '1.05rem',
+                boxShadow: '0 8px 30px rgba(16,185,129,0.4)',
+                marginBottom: '4px',
+                opacity: isProcessing ? 0.6 : 1,
+              }}
+            >
+              <Camera size={22} /> {isProcessing ? 'Memproses...' : '📸 Jepret & Scan'}
             </button>
 
             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} />
